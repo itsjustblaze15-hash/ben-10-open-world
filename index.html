@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ben 10 Open World</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="style.css">
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/examples/jsm/" } }
+</script>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="testbtns"><button id="aibtn" type="button" data-on="1">OTHER AI: ON [Y]</button><button id="bmbtn" type="button">BOSS MANAGER [B]</button></div>
+
+<div id="bossmgr" hidden data-open="0" role="dialog" aria-label="Boss Manager">
+  <div class="bm-panel">
+    <div class="bm-head"><span class="bm-title">BOSS MANAGER</span><button class="bm-x" type="button" aria-label="Close">X</button></div>
+    <div class="bm-row" data-boss="kevin" data-state="despawned"><div class="bm-info"><div class="bm-name">KEVIN 11</div><div class="bm-status">Status: <b>DESPAWNED</b></div></div><button type="button" data-act="spawn">SPAWN</button></div>
+    <div class="bm-row" data-boss="vilgax" data-state="despawned"><div class="bm-info"><div class="bm-name">VILGAX</div><div class="bm-status">Status: <b>DESPAWNED</b></div></div><button type="button" data-act="spawn">SPAWN</button></div>
+    <div class="bm-row" data-boss="albedo" data-state="despawned"><div class="bm-info"><div class="bm-name">ALBEDO</div><div class="bm-status">Status: <b>DESPAWNED</b></div></div><button type="button" data-act="spawn">SPAWN</button></div>
+    <div class="bm-foot">The game is paused while this window is open · B / Esc closes</div>
+  </div>
+</div>
+
+<div id="loading">
+  <div class="logo">BEN 10</div>
+  <div class="sub">OPEN WORLD</div>
+  <div class="bar"><i id="loadbar"></i></div>
+  <div id="loadmsg">Loading…</div>
+</div>
+
+<div id="filewarn" hidden>
+  <h2>This test needs a tiny local server</h2>
+  <p>Browsers block 3D models and ES modules when a page is opened straight from disk (<code>file://</code>).</p>
+  <p><b>Mac:</b> double-click <code>start.command</code> in this folder (right-click → Open the first time).</p>
+  <p>or in Terminal: <code>cd</code> into this folder, then <code>python3 -m http.server 8000</code> and open <code>http://localhost:8000</code></p>
+</div>
+
+<div id="gflash"></div>
+<div id="hud" hidden>
+  <div id="title"><b>DIAMONDHEAD</b><span>CHARACTER TEST · ALL POWERS</span></div>
+  <div id="crosshair"><i></i><i></i><i></i><i></i><b id="hitmark"></b></div>
+  <div id="debug"></div>
+  <div id="toast"></div>
+  <div id="controls">
+    <h3>CONTROLS <small>[H] · TAB = MAP</small></h3>
+    <table id="ctl-ben">
+      <tr><td>W A S D</td><td>Move</td></tr>
+      <tr><td>Mouse</td><td>Camera · wheel = zoom</td></tr>
+      <tr><td>Shift</td><td>Run (hold to sprint)</td></tr>
+      <tr><td>Space</td><td>Jump</td></tr>
+      <tr class="on"><td>Left Click</td><td>Punch (click again for a 3-hit combo) — Ben is weak, no powers</td></tr>
+      <tr class="on"><td>C</td><td>Omnitrix (pause card: CUSTOM / RANDOM / FREEDOM / CYCLE): Custom opens the dial (A / D) · Random transforms at once · Freedom: tap C = dial, also as an alien, no timer · Cycle: tap C = next alien · hold C = back to Ben</td></tr>
+      <tr class="on"><td>A / D</td><td>(dial open) previous / next alien · C or Enter = transform · Q = cancel</td></tr>
+      <tr><td>T / 0</td><td>Reset world: props, cars, bosses</td></tr>
+      <tr><td>B / button</td><td>BOSS MANAGER: spawn / despawn / respawn Kevin 11, Vilgax and Albedo (pauses the game while open · B, Esc or X closes)</td></tr>
+      <tr><td>Y / button</td><td>OTHER AI on / off (turrets, guards, chasers) — the three bosses are never affected</td></tr>
+      <tr><td>F3 / Esc</td><td>Developer overlay (hidden by default) / Pause (Omnitrix settings are in the pause card)</td></tr>
+    </table>
+    <table id="ctl-dh">
+      <tr><td>W A S D</td><td>Move</td></tr>
+      <tr><td>Mouse</td><td>Camera · wheel = zoom</td></tr>
+      <tr><td>Shift</td><td>Run</td></tr>
+      <tr><td>Space</td><td>Jump (crouch → launch → land)</td></tr>
+      <tr><td>V</td><td>Crystal Dash</td></tr>
+      <tr class="on"><td>C</td><td>Omnitrix: HOLD C (1 s) = Ben · Custom / Random: 2:00 then 1:00 recharge · Freedom / Cycle: no timer, no cooldown (Freedom: tap C = dial · Cycle: tap C = next)</td></tr>
+      <tr class="on"><td>Left Click</td><td>Crystal Projectiles (hold = repeat)</td></tr>
+      <tr class="on"><td>Q</td><td>Crystal Weapons (tap Q to chain a 4-hit combo)</td></tr>
+      <tr class="on"><td>F</td><td>Crystal Shield (hold)</td></tr>
+      <tr class="on"><td>G</td><td>Crystal Spikes</td></tr>
+      <tr class="on"><td>E</td><td>Crystal Constructs (1 bridge · 2 platform · 3 stairs · 4 wall)</td></tr>
+      <tr class="on"><td>X</td><td>Crystal Cannon (ultimate)</td></tr>
+      <tr><td>T</td><td>Reset world: props, cars, bosses</td></tr>
+      <tr><td>0</td><td>Reset world (any alien)</td></tr>
+      <tr><td>Y</td><td>Training turrets on/off</td></tr>
+      <tr><td>B / button</td><td>BOSS MANAGER: spawn / despawn / respawn Kevin 11, Vilgax and Albedo (pauses the game while open · B, Esc or X closes)</td></tr>
+      <tr><td>Y / button</td><td>OTHER AI on / off (turrets, guards, chasers) — the three bosses are never affected</td></tr>
+      <tr><td>F3</td><td>Debug panel</td></tr>
+      <tr><td>Esc</td><td>Pause</td></tr>
+    </table>
+    <table id="ctl-x" hidden>
+      <tr><td>W A S D</td><td>Move (accelerates: walk → run)</td></tr>
+      <tr><td>Mouse</td><td>Camera · wheel = zoom</td></tr>
+      <tr class="on"><td>Shift</td><td>Super sprint (hold)</td></tr>
+      <tr><td>Space</td><td>Jump · long jump at speed</td></tr>
+      <tr class="on"><td>C</td><td>Omnitrix: HOLD C (1 s) = Ben · Custom / Random: 2:00 then 1:00 recharge · Freedom / Cycle: no timer, no cooldown (Freedom: tap C = dial · Cycle: tap C = next)</td></tr>
+      <tr class="on"><td>Left Click</td><td>Speed Combo (dash in · strikes · finisher)</td></tr>
+      <tr class="on"><td>T</td><td>Time Slow — 10 s, then 20 s cooldown</td></tr>
+      <tr class="on"><td>Q</td><td>Speed Dash — steerable burst, hits what it passes</td></tr>
+      <tr class="on"><td>E</td><td>Spin Attack — whirlwind, 3 pulses around you</td></tr>
+      <tr class="on"><td>F</td><td>Speed Clones — afterimages strike from 4 sides</td></tr>
+      <tr class="on"><td>G</td><td>Speed Throw — grab the enemy ahead, carry, hurl (bosses: hard hit)</td></tr>
+      <tr class="on"><td>X</td><td>Hyper Drive — rush through up to 6 enemies + blast</td></tr>
+      <tr class="on"><td>Z</td><td>Slide (while running) · Space cancels</td></tr>
+      <tr class="on"><td>Wall / Water</td><td>Jump at a tall wall holding Shift to wall-run · sprint over the blue pool to run on water</td></tr>
+      <tr><td>0</td><td>Reset world: props, cars, bosses</td></tr>
+      <tr><td>Y</td><td>Training turrets on/off</td></tr>
+      <tr><td>M</td><td>Sound on/off</td></tr>
+      <tr><td>B / button</td><td>BOSS MANAGER: spawn / despawn / respawn Kevin 11, Vilgax and Albedo (pauses the game while open · B, Esc or X closes)</td></tr>
+      <tr><td>Y / button</td><td>OTHER AI on / off (turrets, guards, chasers) — the three bosses are never affected</td></tr>
+      <tr><td>F3</td><td>Debug panel</td></tr>
+      <tr><td>Esc</td><td>Pause</td></tr>
+    </table>
+    <table id="ctl-fa" hidden>
+      <tr><td>W A S D</td><td>Move (heavy walk · Shift = powerful run)</td></tr>
+      <tr><td>Mouse</td><td>Camera · wheel = zoom · crosshair aims throws</td></tr>
+      <tr><td>Space</td><td>High jump · heavy landing · climbs/vaults what you jump at</td></tr>
+      <tr class="on"><td>C</td><td>Omnitrix: HOLD C (1 s) = Ben · Custom / Random: 2:00 then 1:00 recharge · Freedom / Cycle: no timer, no cooldown (Freedom: tap C = dial · Cycle: tap C = next)</td></tr>
+      <tr class="on"><td>Left Click</td><td>Heavy Punch Combo (click up to 4×; 4th = final smash)</td></tr>
+      <tr class="on"><td>Right Click / L</td><td>Block (hold)</td></tr>
+      <tr class="on"><td>V</td><td>Grab / carry (up to 4 arms) — V again with nothing in reach drops</td></tr>
+      <tr class="on"><td>G</td><td>Environmental attack — lift car / dumpster / rock / streetlight; G again = aimed throw</td></tr>
+      <tr class="on"><td>Q</td><td>Grab &amp; Slam an enemy</td></tr>
+      <tr class="on"><td>E</td><td>Double-Fist Ground Pound (shockwave)</td></tr>
+      <tr class="on"><td>F</td><td>Multi-Grab (2 enemies): slam together · spin · throw apart</td></tr>
+      <tr class="on"><td>T</td><td>Rage Mode — 10 s, then 20 s cooldown</td></tr>
+      <tr class="on"><td>R</td><td>Seismic Slam (ultimate)</td></tr>
+      <tr class="on"><td>Z</td><td>Heavy shove</td></tr>
+      <tr class="on"><td>X</td><td>Drop everything you hold</td></tr>
+      <tr class="on"><td>Walk / run into</td><td>Pushes loose objects · running into a wall breaks it</td></tr>
+      <tr><td>0</td><td>Reset world: props + bosses</td></tr>
+      <tr><td>Y / M</td><td>Other AI on/off · sound</td></tr>
+      <tr><td>B / button</td><td>BOSS MANAGER: spawn / despawn / respawn Kevin 11, Vilgax and Albedo (pauses the game while open · B, Esc or X closes)</td></tr>
+      <tr><td>Y / button</td><td>OTHER AI on / off (turrets, guards, chasers) — the three bosses are never affected</td></tr>
+      <tr><td>F3 / Esc</td><td>Developer overlay (hidden by default) / Pause</td></tr>
+    </table>
+    <table id="ctl-hb" hidden>
+      <tr><td>W A S D</td><td>Move (walk · Shift = sprint)</td></tr>
+      <tr><td>Mouse</td><td>Camera · wheel = zoom · crosshair aims fire</td></tr>
+      <tr><td>Space</td><td>Jump · double jump · ascend while flying</td></tr>
+      <tr><td>Ctrl</td><td>Descend while flying</td></tr>
+      <tr><td>Shift</td><td>Sprint · flight boost</td></tr>
+      <tr class="on"><td>X</td><td>Toggle flight (take off / land)</td></tr>
+      <tr class="on"><td>Left Click</td><td>Fire Blast (hold = repeat) · works in the air</td></tr>
+      <tr class="on"><td>Q</td><td>Fireball — arcs to the crosshair, explodes</td></tr>
+      <tr class="on"><td>E</td><td>Flame Punch — tap up to 3× for a combo</td></tr>
+      <tr class="on"><td>F</td><td>Fire Wave — sweeps the ground, leaves flames</td></tr>
+      <tr class="on"><td>G</td><td>Fire Protection — burns whatever touches you</td></tr>
+      <tr class="on"><td>R</td><td>Large Fire Burst (charged ultimate)</td></tr>
+      <tr class="on"><td>C</td><td>Omnitrix: HOLD C (1 s) = Ben · Custom / Random: 2:00 then 1:00 recharge · Freedom / Cycle: no timer, no cooldown (Freedom: tap C = dial · Cycle: tap C = next)</td></tr>
+      <tr><td>T / 0</td><td>Reset world: props + bosses</td></tr>
+      <tr><td>Y / M</td><td>Other AI on/off · sound</td></tr>
+      <tr><td>B / button</td><td>BOSS MANAGER: spawn / despawn / respawn Kevin 11, Vilgax and Albedo (pauses the game while open · B, Esc or X closes)</td></tr>
+      <tr><td>Y / button</td><td>OTHER AI on / off (turrets, guards, chasers) — the three bosses are never affected</td></tr>
+      <tr><td>F3 / Esc</td><td>Developer overlay (hidden by default) / Pause</td></tr>
+    </table>
+    <table id="ctl-up" hidden>
+      <tr><td>W A S D</td><td>Move · drives the machine while controlling one</td></tr>
+      <tr><td>Mouse</td><td>Camera · wheel = zoom · crosshair aims the laser</td></tr>
+      <tr><td>Shift</td><td>Sprint · vehicle boost</td></tr>
+      <tr><td>Space</td><td>Jump · robot jump · vehicle brake</td></tr>
+      <tr class="on"><td>Left Click</td><td>Merge with the technology in front of you</td></tr>
+      <tr class="on"><td>Q</td><td>Eye Laser (charge, beam, cooldown)</td></tr>
+      <tr class="on"><td>E</td><td>Enhance the merged machine</td></tr>
+      <tr class="on"><td>F</td><td>Control Machine (drive / pilot / operate)</td></tr>
+      <tr class="on"><td>G</td><td>Liquid Body — squeeze through gaps, flow around obstacles</td></tr>
+      <tr class="on"><td>T</td><td>Detach from the machine</td></tr>
+      <tr class="on"><td>C</td><td>Omnitrix: HOLD C (1 s) = Ben · Custom / Random: 2:00 then 1:00 recharge · Freedom / Cycle: no timer, no cooldown (Freedom: tap C = dial · Cycle: tap C = next)</td></tr>
+      <tr><td>0</td><td>Reset world: props + bosses + machines</td></tr>
+      <tr><td>Y / M</td><td>Other AI on/off · sound</td></tr>
+      <tr><td>B / button</td><td>BOSS MANAGER: spawn / despawn / respawn Kevin 11, Vilgax and Albedo (pauses the game while open · B, Esc or X closes)</td></tr>
+      <tr><td>Y / button</td><td>OTHER AI on / off (turrets, guards, chasers) — the three bosses are never affected</td></tr>
+      <tr><td>F3 / Esc</td><td>Developer overlay (hidden by default) / Pause</td></tr>
+    </table>
+    <table id="ctl-wm" hidden>
+      <tr><td>W A S D</td><td>Move (low four-legged walk · trot · gallop)</td></tr>
+      <tr><td>Mouse</td><td>Camera · wheel = zoom</td></tr>
+      <tr class="on"><td>Shift</td><td>Sprint (hold) — fast, but nowhere near XLR8</td></tr>
+      <tr class="on"><td>Space</td><td>High jump — crouch, launch, absorb the landing</td></tr>
+      <tr class="on"><td>Left Click</td><td>Bite — close-range lunge · tears crates / fences</td></tr>
+      <tr class="on"><td>Q</td><td>Tracking Sense on / off — amber vision, outlines through walls</td></tr>
+      <tr class="on"><td>E</td><td>Climb walls / crates / cars (needs grip) · E again lets go</td></tr>
+      <tr class="on"><td>F</td><td>Claw Swipe — alternates left / right paw</td></tr>
+      <tr class="on"><td>R</td><td>Pounce — real leap at what you face</td></tr>
+      <tr class="on"><td>C</td><td>Omnitrix: HOLD C (1 s) = Ben · Custom / Random: 2:00 then 1:00 recharge · Freedom / Cycle: no timer, no cooldown (Freedom: tap C = dial · Cycle: tap C = next)</td></tr>
+      <tr><td>T / 0</td><td>Reset world: props + bosses</td></tr>
+      <tr><td>Y / M</td><td>Other AI on/off · sound</td></tr>
+      <tr><td>B / button</td><td>BOSS MANAGER: spawn / despawn / respawn Kevin 11, Vilgax and Albedo (pauses the game while open · B, Esc or X closes)</td></tr>
+      <tr><td>Y / button</td><td>OTHER AI on / off (turrets, guards, chasers) — the three bosses are never affected</td></tr>
+      <tr><td>F3 / Esc</td><td>Developer overlay (hidden by default) / Pause</td></tr>
+    </table>
+    <table id="ctl-gf" hidden>
+      <tr class="on"><td>W A S D</td><td>Move — floating glide (no walking, no footsteps)</td></tr>
+      <tr><td>Mouse</td><td>Camera · wheel = zoom</td></tr>
+      <tr class="on"><td>Space</td><td>Ascend — hover, rise, fly above everything</td></tr>
+      <tr class="on"><td>Ctrl</td><td>Descend — back down to a low hover</td></tr>
+      <tr class="on"><td>Shift</td><td>Invisibility (hold) — enemies lose sight of you and walk to where they last saw you</td></tr>
+      <tr class="on"><td>F</td><td>Intangibility on / off — pass through walls, floors and ceilings (moved out of walls when you turn it off)</td></tr>
+      <tr class="on"><td>Q</td><td>Possess a nearby living Guard · Q again exits (not machines, cars)</td></tr>
+      <tr class="on"><td>Left Click</td><td>Claw swipe — close-range hit + knockback (alternates arms)</td></tr>
+      <tr class="on"><td>E</td><td>Tentacle attack — arms stretch out, strike or grab · E again while holding = throw</td></tr>
+      <tr><td>R</td><td>Not used</td></tr>
+      <tr class="on"><td>C</td><td>Omnitrix: HOLD C (1 s) = Ben · Custom / Random: 2:00 then 1:00 recharge · Freedom / Cycle: no timer, no cooldown (Freedom: tap C = dial · Cycle: tap C = next)</td></tr>
+      <tr><td>T / 0</td><td>Reset world: props + bosses + guards</td></tr>
+      <tr><td>Y / M</td><td>Other AI on/off · sound</td></tr>
+      <tr><td>B / button</td><td>BOSS MANAGER: spawn / despawn / respawn Kevin 11, Vilgax and Albedo (pauses the game while open · B, Esc or X closes)</td></tr>
+      <tr><td>Y / button</td><td>OTHER AI on / off (turrets, guards, chasers) — the three bosses are never affected</td></tr>
+      <tr><td>F3 / Esc</td><td>Developer overlay (hidden by default) / Pause</td></tr>
+    </table>
+    <table id="ctl-rj" hidden>
+      <tr class="on"><td>W A S D</td><td>Move on land · swim in every direction underwater (along where the camera looks)</td></tr>
+      <tr><td>Mouse</td><td>Camera · wheel = zoom (full up / down look while swimming)</td></tr>
+      <tr class="on"><td>Shift</td><td>Run on land · swim faster underwater (bubbles, no glow)</td></tr>
+      <tr class="on"><td>Space</td><td>Jump on land · swim up underwater · tap at the surface to leap out of the water</td></tr>
+      <tr class="on"><td>Ctrl</td><td>Dive down (underwater)</td></tr>
+      <tr class="on"><td>Left Click</td><td>Bite — lunge, jaws open, snap shut (hold = repeat) · breaks wooden + small props, not walls / rocks / cars</td></tr>
+      <tr class="on"><td>E</td><td>Claw attack — short-range swipe, alternating arms (tap again to chain)</td></tr>
+      <tr class="on"><td>C</td><td>Omnitrix: HOLD C (1 s) = Ben · Custom / Random: 2:00 then 1:00 recharge · Freedom / Cycle: no timer, no cooldown (Freedom: tap C = dial · Cycle: tap C = next)</td></tr>
+      <tr><td>T / 0</td><td>Reset world: props + bosses + divers</td></tr>
+      <tr><td>Y / M</td><td>Other AI on/off · sound</td></tr>
+      <tr><td>B / button</td><td>BOSS MANAGER: spawn / despawn / respawn Kevin 11, Vilgax and Albedo (pauses the game while open · B, Esc or X closes)</td></tr>
+      <tr><td>Y / button</td><td>OTHER AI on / off (turrets, guards, chasers) — the three bosses are never affected</td></tr>
+      <tr><td>F3 / Esc</td><td>Developer overlay (hidden by default) / Pause</td></tr>
+    </table>
+    <table id="ctl-sf" hidden>
+      <tr class="on"><td>W A S D</td><td>Move on the ground · fly in every direction in the air</td></tr>
+      <tr><td>Mouse</td><td>Camera · aim (the slime goes to the crosshair) · wheel = zoom</td></tr>
+      <tr class="on"><td>Shift</td><td>Run · fly faster</td></tr>
+      <tr class="on"><td>Space</td><td>Take off · ascend (tap in mid-air to open the wings)</td></tr>
+      <tr class="on"><td>Ctrl</td><td>Descend (lands on streets, rooftops and platforms)</td></tr>
+      <tr class="on"><td>Left Click</td><td>Shoot sticky slime from the eyestalks (hold = repeat) · 1 hit slows, more hits restrict, a lot traps — it wears off</td></tr>
+      <tr class="on"><td>Q</td><td>Claw attack — alternating claws, works in the air</td></tr>
+      <tr class="on"><td>E</td><td>Tail strike — physical stinger whip, small knockback</td></tr>
+      <tr class="on"><td>C</td><td>Omnitrix: HOLD C (1 s) = Ben · Custom / Random: 2:00 then 1:00 recharge · Freedom / Cycle: no timer, no cooldown (Freedom: tap C = dial · Cycle: tap C = next)</td></tr>
+      <tr><td>T / 0</td><td>Reset world: props + bosses + slime</td></tr>
+      <tr><td>Y / M</td><td>Other AI on/off · sound</td></tr>
+      <tr><td>B / button</td><td>BOSS MANAGER: spawn / despawn / respawn Kevin 11, Vilgax and Albedo (pauses the game while open · B, Esc or X closes)</td></tr>
+      <tr><td>Y / button</td><td>OTHER AI on / off (turrets, guards, chasers) — the three bosses are never affected</td></tr>
+      <tr><td>F3 / Esc</td><td>Developer overlay (hidden by default) / Pause</td></tr>
+    </table>
+    <table id="ctl-cb" hidden>
+      <tr class="on"><td>W A S D</td><td>Walk / run (normal form) · accelerate and steer (ball form)</td></tr>
+      <tr><td>Mouse</td><td>Camera (it follows the ball but never spins with it) · wheel = zoom</td></tr>
+      <tr class="on"><td>Shift</td><td>Run · roll much faster (builds momentum, stronger impacts, longer ramp launches)</td></tr>
+      <tr class="on"><td>Space</td><td>Jump · rolling jump (keeps momentum and spin, bounces on landing)</td></tr>
+      <tr class="on"><td>Ctrl</td><td>Brake while rolling</td></tr>
+      <tr class="on"><td>Q</td><td>Curl into the ball / unroll (waits for room to stand)</td></tr>
+      <tr class="on"><td>Left Click</td><td>Normal: 3-hit punch combo · Ball: rolling impact (damage + knockback scale with speed)</td></tr>
+      <tr class="on"><td>E</td><td>Normal: heavy ground slam · Ball: unroll attack</td></tr>
+      <tr class="on"><td>F</td><td>Ball: capture a small enemy you are touching · press again to release (max shown in HUD)</td></tr>
+      <tr class="on"><td>C</td><td>Omnitrix: HOLD C (1 s) = Ben · Custom / Random: 2:00 then 1:00 recharge · Freedom / Cycle: no timer, no cooldown (Freedom: tap C = dial · Cycle: tap C = next)</td></tr>
+      <tr><td>T / 0</td><td>Reset world: props + bosses (releases passengers)</td></tr>
+      <tr><td>Y / M</td><td>Other AI on/off · sound</td></tr>
+      <tr><td>B / button</td><td>BOSS MANAGER: spawn / despawn / respawn Kevin 11, Vilgax and Albedo (pauses the game while open · B, Esc or X closes)</td></tr>
+      <tr><td>Y / button</td><td>OTHER AI on / off (turrets, guards, chasers) — the three bosses are never affected</td></tr>
+      <tr><td>F3 / Esc</td><td>Developer overlay (hidden by default) / Pause</td></tr>
+    </table>
+    <table id="ctl-gm" hidden>
+      <tr class="on"><td>W A S D</td><td>Walk (small quick steps) · on a wall he can climb: W / S up / down, A / D slide</td></tr>
+      <tr><td>Mouse</td><td>Camera (low and close, scaled to a 13 cm alien) · wheel = zoom</td></tr>
+      <tr class="on"><td>Shift</td><td>Sprint (agile, still far slower than XLR8)</td></tr>
+      <tr class="on"><td>Space</td><td>Jump (about 25 cm; grabs ledges mid-jump) · jump off a climb</td></tr>
+      <tr class="on"><td>Ctrl</td><td>Crouch / crawl — under cars, benches, 10 cm vents and ducts</td></tr>
+      <tr class="on"><td>E</td><td>Interact / hack / repair the device in front of you (hold to repair) · puzzle: WASD select, Space rotate</td></tr>
+      <tr class="on"><td>Q</td><td>Use device: start generator, open door, run console function, take over a turret</td></tr>
+      <tr class="on"><td>Left Click</td><td>Quick shove-punch (very short range, weak) · fires a controlled turret</td></tr>
+      <tr class="on"><td>C</td><td>Omnitrix: HOLD C (1 s) = Ben · Custom / Random: 2:00 then 1:00 recharge · Freedom / Cycle: no timer, no cooldown (Freedom: tap C = dial · Cycle: tap C = next)</td></tr>
+      <tr><td>T / 0</td><td>Reset world: props + bosses + devices</td></tr>
+      <tr><td>Y / M</td><td>Other AI on/off · sound</td></tr>
+      <tr><td>B / button</td><td>BOSS MANAGER: spawn / despawn / respawn Kevin 11, Vilgax and Albedo (pauses the game while open · B, Esc or X closes)</td></tr>
+      <tr><td>Y / button</td><td>OTHER AI on / off (turrets, guards, chasers) — the three bosses are never affected</td></tr>
+      <tr><td>F3 / Esc</td><td>Developer overlay (hidden by default) / Pause</td></tr>
+    </table>
+    <table id="ctl-wb" hidden>
+      <tr class="on"><td>W A S D</td><td>Walk (11 m/s) — an 80 m giant: each step covers ~15 m, feet are planted, buildings block him above 10 m step height</td></tr>
+      <tr><td>Mouse</td><td>Giant camera (far, high, never inside buildings) · wheel = zoom · N = camera shake OFF / LOW / FULL</td></tr>
+      <tr class="on"><td>Shift</td><td>Run (25 m/s, heavy footfalls crush what is under his feet)</td></tr>
+      <tr class="on"><td>Space</td><td>Jump (no double jump, no flight) — heavy landing shakes the ground</td></tr>
+      <tr class="on"><td>Left Click</td><td>Punch (a real fist swing — the fist has to connect) · hold = charged heavy punch (physical, no energy)</td></tr>
+      <tr class="on"><td>Q</td><td>Chest energy blast — red-white beam from the chest emitter only (energy + cooldown, limited range)</td></tr>
+      <tr class="on"><td>E</td><td>Grab / release a car, truck, tree, enemy... (mass limit) · carried: Left Click = throw, E = put down</td></tr>
+      <tr class="on"><td>R</td><td>Stomp — damage starts at the foot</td></tr>
+      <tr class="on"><td>Ctrl</td><td>Defensive stance (hold): arms crossed, incoming damage cut, slow walk</td></tr>
+      <tr class="on"><td>C</td><td>Omnitrix: HOLD C (1 s) = Ben · Custom / Random: 2:00 then 1:00 recharge · Freedom / Cycle: no timer, no cooldown (Freedom: tap C = dial · Cycle: tap C = next)</td></tr>
+      <tr><td>T / 0</td><td>Reset world: props + bosses + the city</td></tr>
+      <tr><td>Y / M / N</td><td>Other AI on/off · sound · camera shake</td></tr>
+      <tr><td>B / button</td><td>BOSS MANAGER: spawn / despawn / respawn Kevin 11, Vilgax and Albedo (pauses the game while open · B, Esc or X closes)</td></tr>
+      <tr><td>Y / button</td><td>OTHER AI on / off (turrets, guards, chasers) — the three bosses are never affected</td></tr>
+      <tr><td>F3 / Esc</td><td>Developer overlay (hidden by default) / Pause</td></tr>
+    </table>
+  </div>
+  <div id="hurt"></div>
+  <div id="speedfx"></div>
+  <div id="slowfx"></div>
+  <div id="shieldbar"><span>SHIELD</span><i><b id="sh-hp"></b></i></div>
+  <div id="conbar">CONSTRUCT <b id="conmode">BRIDGE</b> <small>[1-4]</small></div>
+  <div id="abilities-ben" hidden>
+    <div class="slot on" id="benslot-lmb"><b>LMB</b><span>Punch</span></div>
+    <div class="slot on" id="benslot-sh"><b>Shift</b><span>Run</span></div>
+    <div class="slot on" id="benslot-sp"><b>Space</b><span>Jump</span></div>
+    <div class="slot on" id="benslot-c"><b>C</b><span>Omnitrix</span></div>
+  </div>
+  <div id="ben-bars" hidden>
+    <div class="fabar"><span>HEALTH</span><i><b id="ben-hp"></b></i></div>
+    <div class="benrow" id="ben-state">IDLE</div>
+  </div>
+  <div id="abilities">
+    <div class="slot on" id="slot-lmb"><b>LMB</b><span>Projectiles</span></div>
+    <div class="slot" id="slot-c"><b>V</b><span>Dash</span><i id="dashcd"></i></div>
+    <div class="slot on" id="slot-q"><b>Q</b><span>Weapons</span><i id="cd-q"></i></div>
+    <div class="slot on" id="slot-f"><b>F</b><span>Shield</span><i id="cd-f"></i></div>
+    <div class="slot on" id="slot-g"><b>G</b><span>Spikes</span><i id="cd-g"></i></div>
+    <div class="slot on" id="slot-e"><b>E</b><span>Constructs</span><i id="cd-e"></i></div>
+    <div class="slot on" id="slot-x"><b>X</b><span>Cannon</span><i id="cd-x"></i></div>
+  </div>
+  <div id="abilities-x" hidden>
+    <div class="slot on" id="xslot-lmb"><b>LMB</b><span>Speed Combo</span></div>
+    <div class="slot on" id="xslot-t"><b>T</b><span>Time Slow</span><i id="xcd-t"></i></div>
+    <div class="slot on" id="xslot-q"><b>Q</b><span>Dash</span><i id="xcd-q"></i></div>
+    <div class="slot on" id="xslot-e"><b>E</b><span>Spin</span><i id="xcd-e"></i></div>
+    <div class="slot on" id="xslot-f"><b>F</b><span>Clones</span><i id="xcd-f"></i></div>
+    <div class="slot on" id="xslot-g"><b>G</b><span>Throw</span><i id="xcd-g"></i></div>
+    <div class="slot on" id="xslot-x"><b>X</b><span>Hyper</span><i id="xcd-x"></i></div>
+    <div class="slot on" id="xslot-z"><b>Z</b><span>Slide</span></div>
+    <div class="slot on" id="xslot-c"><b>C</b><span>Omnitrix</span></div>
+  </div>
+  <div id="abilities-fa" hidden>
+    <div class="slot on" id="faslot-lmb"><b>LMB</b><span>Punch</span></div>
+    <div class="slot on" id="faslot-rmb"><b>RMB</b><span>Block</span></div>
+    <div class="slot on" id="faslot-v"><b>V</b><span>Grab</span></div>
+    <div class="slot on" id="faslot-q"><b>Q</b><span>Slam</span><i id="facd-q"></i></div>
+    <div class="slot on" id="faslot-e"><b>E</b><span>Pound</span><i id="facd-e"></i></div>
+    <div class="slot on" id="faslot-f"><b>F</b><span>Multi</span><i id="facd-f"></i></div>
+    <div class="slot on" id="faslot-g"><b>G</b><span>Environ</span><i id="facd-g"></i></div>
+    <div class="slot on" id="faslot-t"><b>T</b><span>Rage</span><i id="facd-t"></i></div>
+    <div class="slot on" id="faslot-r"><b>R</b><span>Seismic</span><i id="facd-r"></i></div>
+    <div class="slot on" id="faslot-z"><b>Z</b><span>Shove</span><i id="facd-z"></i></div>
+  </div>
+  <div id="fa-bars" hidden>
+    <div class="fabar"><span>HEALTH</span><i><b id="fa-hp"></b></i></div>
+    <div class="fabar" id="fa-ragebar"><span id="fa-ragelabel">RAGE READY [T]</span><i><b id="fa-rage"></b></i></div>
+  </div>
+  <div id="abilities-hb" hidden>
+    <div class="slot on" id="hbslot-lmb"><b>LMB</b><span>Blast</span><i id="hbcd-lmb"></i></div>
+    <div class="slot on" id="hbslot-q"><b>Q</b><span>Fireball</span><i id="hbcd-q"></i></div>
+    <div class="slot on" id="hbslot-e"><b>E</b><span>Punch</span><i id="hbcd-e"></i></div>
+    <div class="slot on" id="hbslot-f"><b>F</b><span>Wave</span><i id="hbcd-f"></i></div>
+    <div class="slot on" id="hbslot-g"><b>G</b><span>Protect</span><i id="hbcd-g"></i></div>
+    <div class="slot on" id="hbslot-x"><b>X</b><span>Flight</span></div>
+    <div class="slot on" id="hbslot-r"><b>R</b><span>Burst</span><i id="hbcd-r"></i></div>
+    <div class="slot on" id="hbslot-c"><b>C</b><span>Omnitrix</span></div>
+  </div>
+  <div id="hb-bars" hidden>
+    <div class="fabar"><span>HEALTH</span><i><b id="hb-hp"></b></i></div>
+    <div class="fabar" id="hb-protbar"><span id="hb-protlabel">FIRE PROTECTION READY [G]</span><i><b id="hb-prot"></b></i></div>
+  </div>
+  <div id="hbhint" hidden></div>
+  <div id="firefx"></div>
+  <div id="abilities-up" hidden>
+    <div class="slot on" id="upslot-lmb"><b>LMB</b><span>Merge</span></div>
+    <div class="slot on" id="upslot-q"><b>Q</b><span>Laser</span><i id="upcd-q"></i></div>
+    <div class="slot on" id="upslot-e"><b>E</b><span>Enhance</span><i id="upcd-e"></i></div>
+    <div class="slot on" id="upslot-f"><b>F</b><span>Control</span></div>
+    <div class="slot on" id="upslot-g"><b>G</b><span>Liquid</span></div>
+    <div class="slot on" id="upslot-t"><b>T</b><span>Detach</span></div>
+    <div class="slot on" id="upslot-c"><b>C</b><span>Omnitrix</span></div>
+  </div>
+  <div id="up-bars" hidden>
+    <div class="fabar"><span>HEALTH</span><i><b id="up-hp"></b></i></div>
+    <div class="fabar" id="up-enbar"><span id="up-enlabel">ENERGY</span><i><b id="up-en"></b></i></div>
+    <div class="fabar" id="up-machbar"><span id="up-machlabel">NO MACHINE</span><i><b id="up-mach"></b></i></div>
+  </div>
+  <div id="uphint" hidden></div>
+  <div id="upfx"></div>
+  <div id="gffx"></div>
+  <div id="abilities-wm" hidden>
+    <div class="slot on" id="wmslot-lmb"><b>LMB</b><span>Bite</span><i id="wmcd-lmb"></i></div>
+    <div class="slot on" id="wmslot-f"><b>F</b><span>Claw</span><i id="wmcd-f"></i></div>
+    <div class="slot on" id="wmslot-r"><b>R</b><span>Pounce</span><i id="wmcd-r"></i></div>
+    <div class="slot on" id="wmslot-q"><b>Q</b><span>Sense</span><i id="wmcd-q"></i></div>
+    <div class="slot on" id="wmslot-e"><b>E</b><span>Climb</span><i id="wmcd-e"></i></div>
+    <div class="slot on" id="wmslot-sp"><b>Space</b><span>Leap</span></div>
+    <div class="slot on" id="wmslot-c"><b>C</b><span>Omnitrix</span></div>
+  </div>
+  <div id="wm-bars" hidden>
+    <div class="fabar"><span>HEALTH</span><i><b id="wm-hp"></b></i></div>
+    <div class="fabar" id="wm-sensebar"><span id="tsstate">TRACKING SENSE: OFF</span><i><b id="wm-sense"></b></i></div>
+  </div>
+  <div id="wmhint" hidden></div>
+  <div id="abilities-gf" hidden>
+    <div class="slot on" id="gfslot-lmb"><b>LMB</b><span>Claw</span><i id="gfcd-lmb"></i></div>
+    <div class="slot on" id="gfslot-e"><b>E</b><span>Tentacle</span><i id="gfcd-e"></i></div>
+    <div class="slot on" id="gfslot-q"><b>Q</b><span>Possess</span><i id="gfcd-q"></i></div>
+    <div class="slot on" id="gfslot-f"><b>F</b><span>Phase</span><i id="gfcd-f"></i></div>
+    <div class="slot on" id="gfslot-sh"><b>Shift</b><span>Invisible</span></div>
+    <div class="slot on" id="gfslot-sp"><b>Space</b><span>Fly</span></div>
+    <div class="slot on" id="gfslot-c"><b>C</b><span>Omnitrix</span></div>
+  </div>
+  <div id="gf-bars" hidden>
+    <div class="fabar"><span>HEALTH</span><i><b id="gf-hp"></b></i></div>
+    <div class="gfstat" id="gf-inv">INVISIBILITY: OFF</div>
+    <div class="gfstat" id="gf-phase">INTANGIBILITY: OFF</div>
+    <div class="gfstat" id="gf-poss">POSSESSION: INACTIVE</div>
+    <div class="gfstat" id="gf-awarebar"><span id="gf-aware">NOT DETECTED</span></div>
+  </div>
+  <div id="gfhint" hidden></div>
+  <div id="rjfx"></div>
+  <div id="abilities-rj" hidden>
+    <div class="slot on" id="rjslot-lmb"><b>LMB</b><span>Bite</span><i id="rjcd-lmb"></i></div>
+    <div class="slot on" id="rjslot-e"><b>E</b><span>Claw</span><i id="rjcd-e"></i></div>
+    <div class="slot on" id="rjslot-sh"><b>Shift</b><span>Run / Fast</span></div>
+    <div class="slot on" id="rjslot-sp"><b>Space</b><span>Jump / Up</span></div>
+    <div class="slot on" id="rjslot-ct"><b>Ctrl</b><span>Dive</span></div>
+    <div class="slot on" id="rjslot-c"><b>C</b><span>Omnitrix</span></div>
+  </div>
+  <div id="rj-bars" hidden>
+    <div class="fabar"><span>HEALTH</span><i><b id="rj-hp"></b></i></div>
+    <div class="rjenv" id="rj-env" data-env="land">LAND</div>
+  </div>
+  <div id="rjhint" hidden></div>
+  <div id="abilities-sf" hidden>
+    <div class="slot on" id="sfslot-lmb"><b>LMB</b><span>Slime</span><i id="sfcd-lmb"></i></div>
+    <div class="slot on" id="sfslot-q"><b>Q</b><span>Claw</span><i id="sfcd-q"></i></div>
+    <div class="slot on" id="sfslot-e"><b>E</b><span>Tail</span><i id="sfcd-e"></i></div>
+    <div class="slot on" id="sfslot-sh"><b>Shift</b><span>Run / Fast</span></div>
+    <div class="slot on" id="sfslot-sp"><b>Space</b><span>Take Off / Up</span></div>
+    <div class="slot on" id="sfslot-ct"><b>Ctrl</b><span>Descend</span></div>
+    <div class="slot on" id="sfslot-c"><b>C</b><span>Omnitrix</span></div>
+  </div>
+  <div id="sf-bars" hidden>
+    <div class="fabar"><span>HEALTH</span><i><b id="sf-hp"></b></i></div>
+    <div class="sfflight" id="sf-flight" data-on="0">FLIGHT: INACTIVE</div>
+  </div>
+  <div id="sfhint" hidden></div>
+  <div id="abilities-cb" hidden>
+    <div class="slot on" id="cbslot-lmb"><b>LMB</b><span id="cbslot-lmb-l">Punch</span><i id="cbcd-lmb"></i></div>
+    <div class="slot on" id="cbslot-q"><b>Q</b><span id="cbslot-q-l">Ball</span><i id="cbcd-q"></i></div>
+    <div class="slot on" id="cbslot-e"><b>E</b><span id="cbslot-e-l">Heavy Slam</span><i id="cbcd-e"></i></div>
+    <div class="slot on" id="cbslot-f"><b>F</b><span>Capture</span><i id="cbcd-f"></i></div>
+    <div class="slot on" id="cbslot-sh"><b>Shift</b><span id="cbslot-sh-l">Run</span></div>
+    <div class="slot on" id="cbslot-sp"><b>Space</b><span id="cbslot-sp-l">Jump</span></div>
+    <div class="slot on" id="cbslot-ct"><b>Ctrl</b><span>Brake</span></div>
+    <div class="slot on" id="cbslot-c"><b>C</b><span>Omnitrix</span></div>
+  </div>
+  <div id="cb-bars" hidden>
+    <div class="cbname">CANNONBOLT</div>
+    <div class="fabar"><span>HEALTH</span><i><b id="cb-hp"></b></i></div>
+    <div class="cbrow" id="cb-form" data-ball="0">FORM: NORMAL</div>
+    <div class="cbrow" id="cb-speed">SPEED: 0.0 m/s</div>
+    <div class="cbrow" id="cb-pass">PASSENGERS: 0 / 3</div>
+  </div>
+  <div id="cbhint" hidden></div>
+  <div id="abilities-gm" hidden>
+    <div class="slot on" id="gmslot-lmb"><b>LMB</b><span>Shove</span></div>
+    <div class="slot on" id="gmslot-e"><b>E</b><span>Interact</span></div>
+    <div class="slot on" id="gmslot-q"><b>Q</b><span>Device</span></div>
+    <div class="slot on" id="gmslot-sh"><b>Shift</b><span>Sprint</span></div>
+    <div class="slot on" id="gmslot-sp"><b>Space</b><span>Jump</span></div>
+    <div class="slot on" id="gmslot-ct"><b>Ctrl</b><span>Crawl</span></div>
+    <div class="slot on" id="gmslot-c"><b>C</b><span>Omnitrix</span></div>
+  </div>
+  <div id="gm-bars" hidden>
+    <div class="gmname">GREY MATTER</div>
+    <div class="fabar"><span>HEALTH</span><i><b id="gm-hp"></b></i></div>
+    <div class="gmrow" id="gm-state">IDLE</div>
+  </div>
+  <div id="gmhint" hidden></div>
+  <div id="abilities-wb" hidden>
+    <div class="slot on" id="wbslot-lmb"><b>LMB</b><span>Punch</span></div>
+    <div class="slot on" id="wbslot-hv"><b>Hold LMB</b><span>Heavy Punch</span></div>
+    <div class="slot on" id="wbslot-q"><b>Q</b><span>Chest Blast</span></div>
+    <div class="slot on" id="wbslot-e"><b>E</b><span>Grab / Throw</span></div>
+    <div class="slot on" id="wbslot-r"><b>R</b><span>Stomp</span></div>
+    <div class="slot on" id="wbslot-ct"><b>Ctrl</b><span>Defend</span></div>
+    <div class="slot on" id="wbslot-sh"><b>Shift</b><span>Run</span></div>
+    <div class="slot on" id="wbslot-sp"><b>Space</b><span>Jump</span></div>
+    <div class="slot on" id="wbslot-c"><b>C</b><span>Omnitrix</span></div>
+  </div>
+  <div id="wb-bars" hidden>
+    <div class="wbname">WAY BIG</div>
+    <div class="fabar"><span>HEALTH</span><i><b id="wb-hp"></b></i></div>
+    <div class="fabar wben"><span>CHEST ENERGY</span><i><b id="wb-en"></b></i></div>
+    <div class="fabar wbcd"><span>BLAST COOLDOWN</span><i><b id="wb-cd"></b></i></div>
+    <div class="wbrow" id="wb-state">IDLE</div>
+    <div class="wbrow" id="wb-hold">HANDS FREE</div>
+    <div class="wbrow" id="wb-shake">SHAKE FULL [N]</div>
+  </div>
+  <div id="wbhint" hidden></div>
+  <div id="gm-modal" hidden></div>
+  <div id="grabhint" hidden></div>
+  <div id="ragefx"></div>
+  <div id="timebar" hidden><span id="tb-label">TIME SLOW</span><i><b id="tb-fill"></b></i><em id="tb-time"></em></div>
+</div>
+
+<div id="overlay" hidden>
+  <div class="card">
+    <div class="logo">DIAMONDHEAD</div>
+    <div class="sub" id="ovsub">CLICK TO PLAY</div>
+    <p>Esc pauses · click to resume</p>
+  </div>
+</div>
+
+<script>
+  // Opened directly from disk? Explain instead of showing a blank page.
+  if (location.protocol === 'file:') {
+    document.getElementById('loading').hidden = true;
+    document.getElementById('filewarn').hidden = false;
+  }
+  window.addEventListener('error', e => { const m = document.getElementById('loadmsg'); if (m && !window.__DH_READY) m.textContent = 'Error: ' + (e.message || e); });
+</script>
+<script type="module" src="main.js"></script>
+</body>
+</html>
