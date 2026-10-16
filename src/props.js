@@ -269,6 +269,7 @@ export class PropSystem {
     if (p.kind === 'light') this.g.hud.toast('STREETLIGHT DOWN');
   }
   damageWall(w, dmg, pt = null, dir = null) {
+    if (w.isBld) { if (this.g.destruct) this.g.destruct.damage(w, dmg, pt, dir); return; }       // V30: island buildings
     if (!w.alive || dmg <= 0) return; w.hp -= dmg; const b = w.entry, c = new THREE.Vector3((b.min.x + b.max.x) / 2, (b.min.y + b.max.y) / 2, (b.min.z + b.max.z) / 2); const at = pt || c;
     const stage = w.hp <= 0 ? 3 : w.hp < w.hpMax * 0.35 ? 2 : w.hp < w.hpMax * 0.7 ? 1 : 0;
     this.debris.burst(at, 5, 5, 0.18, 0xbdb9b0); this.g.fx.dust.emit({ pos: at, vel: _v.set(rand(-1, 1), rand(0, 1), rand(-1, 1)), size: 1.4, grow: 1.8, life: 0.7, drag: 2, color: [0.7, 0.68, 0.64], alpha: 0.5 });
@@ -399,7 +400,7 @@ export class PropSystem {
       p.dead = false; p.held = false; p.driven = false; p.root.visible = true; p.hp = p.hpMax; p.pos.copy(p.home.pos); p.yaw = p.home.yaw; p.vel.set(0, 0, 0); p.tumble.set(0, 0, 0); p.spin.set(0, 0, 0); p.state = 'rest'; p.wrecked = false;
       if (p.kind === 'light') p.planted = true; if (p.size0) { p.size = { ...p.size0 }; p.inner.position.copy(p.in0); p.inner.rotation.set(0, 0, 0); p.mass = p.mass0; } this.addBox(p); this.syncRoot(p); this.syncBox(p);
       p.inner.traverse(o => { if (o.isMesh && o.userData.c0) o.material.color.copy(o.userData.c0); }); }
-    for (const w of this.walls) { w.hp = w.hpMax; w.stage = 0; if (!w.alive) { this.world.boxes.push(w.entry); } w.alive = true; w.mesh.visible = true; w.mesh.material = w.mat0; }
+    for (const w of this.walls) { if (w.isBld) continue; w.hp = w.hpMax; w.stage = 0; if (!w.alive) { this.world.boxes.push(w.entry); } w.alive = true; w.mesh.visible = true; w.mesh.material = w.mat0; }
     this.debris.clear(); this.cracks.clear();
   }
 }

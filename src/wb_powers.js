@@ -71,7 +71,7 @@ export function installWbPowers(Cls) {
   P.shoulder = function (side) { return this.shW[side]; };
   /** how far a point is beyond comfortable standing reach, and the body adjustment (crouch / lean) that closes it */
   P.setReach = function (T, side) {
-    const sh = this.shW[side], hd = Math.hypot(T.x - this.pos.x, T.z - this.pos.z), vy = T.y - 57.5, dist = Math.hypot(hd - 2, vy), need = Math.max(0, dist - ARM * 0.86);
+    const sh = this.shW[side], hd = Math.hypot(T.x - this.pos.x, T.z - this.pos.z), vy = T.y - 57.5 * this.U, dist = Math.hypot(hd - 2, vy), need = Math.max(0, dist - (ARM*this.U) * 0.86);
     this.reachGoal = clamp(need * (T.y < 40 ? 0.85 : 0.35), 0, 19); this.leanGoal = clamp(need * 0.017 + (T.y < 25 ? 0.12 : 0), 0, 0.85); void sh;
     return { hd, dist, need };
   };
@@ -83,7 +83,7 @@ export function installWbPowers(Cls) {
   /** where this punch will really land: the crosshair direction from the shoulder, cut at the first thing inside striking range (building cell, wall, prop, enemy, ground) or at maximum reach (a punch into empty air) */
   P.punchTarget = function (side, out = new THREE.Vector3()) {
     const sh = this.shW[side], far = this.aimPointOrForward(), dir = _e.copy(far).sub(sh); let L = dir.length(); if (L < 1) { dir.copy(this.fwdV(_a)); L = 1; } else dir.multiplyScalar(1 / L);
-    let t = Math.min(L, ARM * 0.86 + 20); const w = this.g.world, hit = w.raySolid(sh, dir, t); if (hit) t = hit.t;
+    let t = Math.min(L, (ARM*this.U) * 0.86 + 20); const w = this.g.world, hit = w.raySolid(sh, dir, t); if (hit) t = hit.t;
     for (const h of w.hittables) { if (h.dead || h.held || !h.intersect) continue; const r = h.intersect(sh, dir, t); if (r) t = r.t; }
     return out.copy(sh).addScaledVector(dir, t);
   };
@@ -115,24 +115,24 @@ export function installWbPowers(Cls) {
     const T = a.T, sh = this.shW[a.side], hd = Math.hypot(T.x - this.pos.x, T.z - this.pos.z); a.stage = 'strike'; a.t = 0; a.sd = a.heavy ? 0.3 : 0.22; a.rd = a.heavy ? 0.8 : 0.5; a.dir = _a.copy(T).sub(sh).normalize().clone(); a.lockMove = false; a.moveMul = 0.1; a.prev.copy(this.poser.fistW[a.side]);
     a.power = a.heavy ? 0.45 + 0.75 * a.charge : 0.3; a.lungeV = null;
     // lunge: step into the blow when the target is farther than a comfortable standing reach
-    const gap = hd - (ARM * 0.8 + this.rad); if (gap > 0) { const lv = Math.min(gap, a.heavy ? 20 : 12) / 0.2; a.lungeV = new THREE.Vector3(T.x - this.pos.x, 0, T.z - this.pos.z).normalize().multiplyScalar(lv * 0.1); this.vel.x += a.lungeV.x * 6; this.vel.z += a.lungeV.z * 6; }
+    const gap = hd - ((ARM*this.U) * 0.8 + this.rad); if (gap > 0) { const lv = Math.min(gap, a.heavy ? 20 : 12) / 0.2; a.lungeV = new THREE.Vector3(T.x - this.pos.x, 0, T.z - this.pos.z).normalize().multiplyScalar(lv * 0.1); this.vel.x += a.lungeV.x * 6; this.vel.z += a.lungeV.z * 6; }
     this.g.sfx.whoosh && this.g.sfx.whoosh(); this.g.camera.addTrauma(a.heavy ? 0.1 : 0.03);
   };
   /** the fist really touches things: buildings (lattice ray along the fist's path), the ground, props, walls, enemies */
   P.punchContact = function (a, dt) {
     const g = this.g, k = a.side, f = this.poser.fistW[k], prev = a.prev, mv = _b.copy(f).sub(prev), mvl = mv.length(), dir = mvl > 0.05 ? mv.clone().multiplyScalar(1 / mvl) : a.dir.clone(), heavy = a.heavy, pw = a.power ?? 0.3; void dt;
-    const lead = _c.copy(f).addScaledVector(dir, FISTR * 0.8), D = this.D;
+    const lead = _c.copy(f).addScaledVector(dir, (FISTR*this.U) * 0.8), D = this.D;
     // 1) buildings
     if (!a.hitB) {
-      let hp = null; const id = D.cellAtPoint(lead.x, lead.y, lead.z); if (id >= 0) hp = { point: lead.clone() }; else if (mvl > 0.1) { const h = D.ray(prev, dir, mvl + FISTR); if (h) hp = { point: h.point }; }
+      let hp = null; const id = D.cellAtPoint(lead.x, lead.y, lead.z); if (id >= 0) hp = { point: lead.clone() }; else if (mvl > 0.1) { const h = D.ray(prev, dir, mvl + (FISTR*this.U)); if (h) hp = { point: h.point }; }
       if (hp && _d.copy(hp.point).sub(this.shW[k]).dot(a.dir) < 0) hp = null;   // a building behind the cocked fist is not what this punch is aimed at
-      if (hp) { a.hitB = true; a.contact = true; const r = heavy ? 11 + 7 * pw : 9, dmg = heavy ? 380 + 900 * pw : 260; const n = D.damageSphere(hp.point.clone().addScaledVector(dir, 3), r, dmg, { dir, src: 'punch' }); this.stats.cells += n; this.fx.crashAt(hp.point, heavy ? 12 + 8 * pw : 7, heavy ? 0.25 + 0.3 * pw : 0.1); g.sfx.hit(heavy); this.stats.hits++; if (heavy) g.camera.kick(0.06); }
+      if (hp) { a.hitB = true; a.contact = true; const r = (heavy ? 11 + 7 * pw : 9) * this.U, dmg = (heavy ? 380 + 900 * pw : 260) * this.pwr; const n = D.damageSphere(hp.point.clone().addScaledVector(dir, 3), r, dmg, { dir, src: 'punch' }); this.stats.cells += n; this.fx.crashAt(hp.point, heavy ? 12 + 8 * pw : 7, heavy ? 0.25 + 0.3 * pw : 0.1); g.sfx.hit(heavy); this.stats.hits++; if (heavy) g.camera.kick(0.06); }
     }
     // 2) ground
     const fgy = this.g.world.terrain ? this.g.world.terrain.height(f.x, f.z) : 0;
     if (!a.hitG && f.y - fgy < 3.2 && dir.y < -0.15) { a.hitG = true; a.contact = true; const x = f.x, z = f.z; this.fx.crashAt(_d.set(x, fgy + 1, z), heavy ? 10 : 5, heavy ? 0.22 : 0.06); this.fx.skirt(x, z, heavy ? 12 : 6, heavy ? 12 : 6, heavy ? 10 : 6); this.crushDisk(x, z, heavy ? 10 : 6, 900, heavy ? 320 : 160, 5.0e6 * (heavy ? 1.2 : 0.4)); g.props.cracks.add(x, 0, z, heavy ? 22 : 12, 14); g.sfx.thud(heavy ? 0.8 : 0.5); }
     // 3) enemies, props, walls (sphere around the fist)
-    const R = FISTR + (heavy ? 1.4 : 0), J = (heavy ? 1.2e7 : 2.4e6) * (heavy ? 0.4 + pw : 1);
+    const R = (FISTR*this.U) + (heavy ? 1.4 : 0), J = (heavy ? 1.2e7 : 2.4e6) * (heavy ? 0.4 + pw : 1);
     for (const h of g.world.hittables) {
       if (h.dead || h.held || a.hit.has(h) || !h.spheres || !h.root) continue;
       for (const s of h.spheres) { _d.copy(s.local); h.root.localToWorld(_d); if (_d.distanceTo(f) < s.r + R) { a.hit.add(h); a.contact = true; this.hitTarget(h, _d.clone(), dir, (heavy ? 520 : 190) * (heavy ? 0.5 + pw : 1), J); break; } }
@@ -147,6 +147,7 @@ export function installWbPowers(Cls) {
   };
   /** damage + impulse on one hittable (Dummy / Guard / Turret / Target / WbFoe) */
   P.hitTarget = function (h, point, dir, dmg, J) {
+    dmg *= this.pwr; J *= this.pwr;
     const g = this.g; this.stats.hits++; this.stats.hitsDealt = (this.stats.hitsDealt || 0) + 1;
     if (h.hurt) { h.hurt(dmg, dir, J, 'wb'); if (h.dead) this.stats.kills = this.stats.kills; } else {
       h.applyHit(point.clone(), dir.clone(), dmg); const m = hMass(h); const v = Math.min(42, J / Math.max(30, m));
@@ -155,12 +156,14 @@ export function installWbPowers(Cls) {
     g.hud.hit(point.clone(), Math.round(dmg), h); g.sfx.hit(dmg > 300); g.camera.addTrauma(clamp(dmg / 1600, 0.04, 0.3)); g.fx.glow.emit({ pos: point, size: 9, life: 0.1, drag: 0, color: [1, 0.95, 0.8], alpha: 0.9 });
   };
   P.hitProp = function (p, dir, J, dmg) {
+    dmg *= this.pwr; J *= this.pwr;
     const PS = this.g.props; this.stats.hits++; PS.hurt(p, dmg); if (p.dead) { this.fx.crashAt(p.center, 5, 0.1); return; }
     if (!p.planted) { const v = Math.min(60, J / p.mass); PS.removeBox(p); p.state = 'fly'; p.vel.x += dir.x * v; p.vel.z += dir.z * v; p.vel.y = Math.max(p.vel.y, Math.min(22, 4 + v * 0.25)); p.spin.set(rand(-3, 3), rand(-3, 3), rand(-3, 3)); p.hit.clear(); p.age = 0; }
     this.fx.crashAt(p.center, 4, 0.06);
   };
   /** a flat disk of damage on the ground (fist / foot slam contact) */
   P.crushDisk = function (x, z, r, dmgProp, dmgFoe, J) {
+    dmgProp *= this.pwr; dmgFoe *= this.pwr; J *= this.pwr;
     const g = this.g, PS = g.props;
     for (const p of PS.props) { if (p.dormant || p.held || p.dead) continue; const d = Math.hypot(p.pos.x - x, p.pos.z - z); if (d < r + Math.max(p.half.x, p.half.z) && p.pos.y < 6) { if (p.planted || p.mass < 6000) PS.hurt(p, dmgProp); else PS.hurt(p, dmgProp * 0.5); if (!p.dead && !p.planted) { const dir = _e.set(p.pos.x - x, 0, p.pos.z - z).normalize(); PS.removeBox(p); p.state = 'fly'; p.vel.x += dir.x * 14; p.vel.z += dir.z * 14; p.vel.y = 8; p.spin.set(rand(-2, 2), rand(-2, 2), rand(-2, 2)); } this.stats.crushed++; } }
     for (const h of g.world.hittables) { if (h.dead || h.held || !h.root) continue; const rp = h.root.position, rad = h.kind === 'foe' ? h.rad : 1; if (Math.hypot(rp.x - x, rp.z - z) < r + rad && rp.y < 8) { const dir = _e.set(rp.x - x, 0, rp.z - z).normalize(); this.hitTarget(h, new THREE.Vector3(rp.x, rp.y + 1, rp.z), dir.clone(), h.kind === 'foe' && h.giant ? dmgFoe * 0.25 : dmgFoe, J); this.stats.crushed++; } }
@@ -186,12 +189,12 @@ export function installWbPowers(Cls) {
     if (a.stage === 'charge') { this.beamK = 0; if (a.t >= a.chargeT) { a.stage = 'fire'; a.t = 0; this.g.sfx.boom && this.g.sfx.boom(0.7); this.g.camera.addTrauma(0.35); this.g.camera.kick(0.05); this.vel.x -= sin(this.yaw) * 5; this.vel.z -= cos(this.yaw) * 5; } }
     else if (a.stage === 'fire') {
       const dur = 0.85, k = clamp(Math.min(a.t / 0.08, (dur - a.t) / 0.15), 0, 1); this.beamK = k; this.blastDir(this.beamDir); a.tickT -= dt; this.g.camera.addTrauma(0.012);
-      if (a.tickT <= 0) { a.tickT = 0.085; this.blastTick(a); } this.fx.beam(this.chestW, this.beamDir, this.beamLen || BEAM_LEN, k);
+      if (a.tickT <= 0) { a.tickT = 0.085; this.blastTick(a); } this.fx.beam(this.chestW, this.beamDir, this.beamLen || (BEAM_LEN*this.U), k);
       if (a.t >= dur) { a.stage = 'cool'; a.t = 0; this.beamK = 0; this.fx.hideBeam(); }
     } else if (a.stage === 'cool' && a.t >= 0.4) { this.act = null; }
   };
   P.blastTick = function (a) {
-    const g = this.g, o = this.chestW, d = this.beamDir, D = this.D; let len = BEAM_LEN; this.blastDir(d);
+    const g = this.g, o = this.chestW, d = this.beamDir, D = this.D; let len = (BEAM_LEN*this.U); this.blastDir(d);
     if (d.y < -1e-3) len = Math.min(len, -o.y / d.y);
     const res = D.carve(o, d, len, 6.5, 200, 20); let end = res.end.clone(), L = end.distanceTo(o); this.stats.cells += res.cells;
     const w = g.world; const sb = w.raySolid(o, d, L, true); if (sb) { L = sb.t; end = o.clone().addScaledVector(d, L); }   // arena structure that is not part of the district stops the beam
@@ -210,17 +213,19 @@ export function installWbPowers(Cls) {
   /** things he could grab (props + enemies) in front of him, within his real arm reach, picked by the crosshair */
   P.adapt = function (o) {
     if (o.cat !== undefined && o.pos) return { kind: 'prop', o, mass: o.mass, name: o.kind.toUpperCase(), size: Math.max(o.size.w, o.size.h, o.size.d), center: () => o.center.clone(), setCenter: v => { o.pos.set(v.x, v.y - o.size.h / 2, v.z); this.g.props.syncRoot(o); }, dead: () => o.dead };
+    if (o.isBoss || o.isTrainBot) { const hh = (o.cfg && o.cfg.h) || o.h || 2.4; return { kind: 'boss', o, mass: o.cfg && o.cfg.mass || 400, name: o.label || o.name || 'ENEMY', size: hh, center: () => { const q = (o.isAlbedo && o.cur) ? o.cur.pos : o.root.position; return new THREE.Vector3(q.x, q.y + hh * 0.5, q.z); }, setCenter: v => { o.root.position.set(v.x, v.y - hh * 0.5, v.z); if (o.isAlbedo && o.cur) { o.cur.pos.set(v.x, v.y - hh * 0.5, v.z); o.cur.vel && o.cur.vel.set(0, 0, 0); o.cur.root.updateMatrixWorld(true); } if (o.home && o.home !== o.root.position) o.home.set(v.x, v.y - hh * 0.5, v.z); o.root.updateMatrixWorld(true); }, dead: () => o.dead || o.present === false }; }
     return { kind: 'foe', o, mass: o.mass, name: o.name, size: o.h, center: () => new THREE.Vector3(o.home.x, o.air + o.h * 0.5, o.home.z), setCenter: v => { o.home.x = v.x; o.home.z = v.z; o.air = v.y - o.h * 0.5; o.root.position.set(o.home.x, o.air, o.home.z); o.root.updateMatrixWorld(true); }, dead: () => o.dead };
   };
   P.findGrab = function (strict = true) {
     const g = this.g, fw = this.fwdV(_e), cam = g.camera, ao = cam.aimOrigin, ad = cam.aimDir; let best = null, bs = 1e9; const c = new THREE.Vector3(); let tooHeavy = null;
-    const consider = (ob, cen, mass, size) => {
-      const dx = cen.x - this.pos.x, dz = cen.z - this.pos.z, hd = Math.hypot(dx, dz) || 1; if (hd > ARM + 14 + size * 0.4 || cen.y > 70) return; if ((dx * fw.x + dz * fw.z) / hd < 0.15 && hd > 14) return;
-      if (strict && mass > MAXLIFT) { tooHeavy = tooHeavy || ob; return; }
-      const perp = _a.copy(cen).sub(ao).cross(ad).length(), sc = perp + 0.25 * hd; if (sc < bs) { bs = sc; best = ob; }
+    const consider = (ob, cen, mass, size, bias = 1) => {
+      const dx = cen.x - this.pos.x, dz = cen.z - this.pos.z, hd = Math.hypot(dx, dz) || 1; if (hd > (ARM*this.U) + 14 + size * 0.4 || cen.y > 70) return; if ((dx * fw.x + dz * fw.z) / hd < 0.15 && hd > 14) return;
+      if (strict && mass > (MAXLIFT*this.pwr)) { tooHeavy = tooHeavy || ob; return; }
+      const perp = _a.copy(cen).sub(ao).cross(ad).length(), sc = (perp + 0.25 * hd) * bias; if (sc < bs) { bs = sc; best = ob; }
     };
     for (const p of g.props.props) { if (p.dormant || p.held || p.dead || (p.state !== 'rest' && p.state !== 'slide')) continue; if (p.size.w > 40) continue; consider(p, p.center, p.mass, Math.max(p.size.w, p.size.h, p.size.d)); }
     for (const f of this.D.foes) { if (f.dead || f.held || f.air > 0.5) continue; consider(f, c.set(f.home.x, f.h * 0.5, f.home.z), f.mass, f.h); }
+    for (const b of (g.bossList || []).concat(g.trainBots ? g.trainBots.list : [])) { if (!b || b.dead || b.held || b.present === false || !b.root || !b.root.visible) continue; const hh = (b.cfg && b.cfg.h) || b.h || 2.4, bp = (b.isAlbedo && b.cur) ? b.cur.pos : b.root.position; consider(b, c.set(bp.x, bp.y + hh * 0.5, bp.z), 400, hh, 0.3); }      // V30: Kevin / Vilgax / Albedo / training robots
     for (const d of g.world.hittables) { if (d.kind !== 'foe' && d.constructor.name === 'Guard' && !d.dead && !d.held) { /* guards / dummies are too small to pick up with a 12 m hand: they are punched or stepped on */ } }
     return { best, tooHeavy };
   };
@@ -239,7 +244,7 @@ export function installWbPowers(Cls) {
   P.tickGrab = function (dt, a) {
     const ob = a.ob; if (ob.dead() || (ob.o.held && !this.hold)) { this.act = null; return; }
     const cen = ob.center(); a.gp.copy(cen); a.gp.y += Math.min(ob.size * 0.28, 6); a.faceYaw = Math.atan2(cen.x - this.pos.x, cen.z - this.pos.z); this.setReach(a.gp, 'R');
-    const hd = Math.hypot(cen.x - this.pos.x, cen.z - this.pos.z), need = hd - (ARM * 0.8 + this.rad + ob.size * 0.2);
+    const hd = Math.hypot(cen.x - this.pos.x, cen.z - this.pos.z), need = hd - ((ARM*this.U) * 0.8 + this.rad + ob.size * 0.2);
     if (a.stage === 'reach') {
       // walk up to it if it is farther than his reach (he does not teleport the object; the object only moves once it is gripped)
       if (need > 0) { const dir = _a.set(cen.x - this.pos.x, 0, cen.z - this.pos.z).normalize(); this.vel.x = dir.x * Math.min(16, 4 + need); this.vel.z = dir.z * Math.min(16, 4 + need); }
@@ -252,7 +257,7 @@ export function installWbPowers(Cls) {
   };
   P.beginHold = function (a) {
     const ob = a.ob, k = 'R', fist = this.poser.fistW[k], cen = ob.center(); const o = ob.o;
-    if (ob.kind === 'prop') { this.g.props.setHeld(o); o.planted = false; o.driven = false; } else { o.held = true; o.kv.set(0, 0, 0); o.vy = 0; o.atk = null; }
+    if (ob.kind === 'prop') { this.g.props.setHeld(o); o.planted = false; o.driven = false; } else if (ob.kind === 'boss') { o.held = true; if (o.cancelAct) try { o.cancelAct(); } catch (e) { } } else { o.held = true; o.kv.set(0, 0, 0); o.vy = 0; o.atk = null; }
     this.hold = { ob, name: ob.name, mass: ob.mass, massText: massText(ob.mass), speedMul: 1 - 0.45 * clamp((Math.log10(ob.mass) - 2.5) / 3.5, 0, 1), side: k, off: cen.clone().sub(fist), stage: 'lift', t: 0, dur: clamp(0.7 + Math.pow(ob.mass, 0.22) * 0.1, 0.9, 2.4), from: fist.clone(), two: a.two, carryOff: null };
     this.act = null; this.cd.e = 0.3; this.g.sfx.thud(0.3); this.D.wb = this;
   };
@@ -263,7 +268,7 @@ export function installWbPowers(Cls) {
   P.tickHold = function (dt) {
     const h = this.hold; h.t += dt; const ob = h.ob; if (ob.dead()) { this.hold = null; return; }
     const fist = this.poser.fistW[h.side]; _a.copy(fist).add(h.off); ob.setCenter(_a);
-    if (ob.kind === 'prop') { ob.o.vel.set(0, 0, 0); ob.o.yaw = lerpAngle(ob.o.yaw, this.yaw, 1 - Math.exp(-3 * dt)); this.g.props.syncRoot(ob.o); } else { ob.o.yaw = lerpAngle(ob.o.yaw, this.yaw + Math.PI, 1 - Math.exp(-3 * dt)); }
+    if (ob.kind === 'prop') { ob.o.vel.set(0, 0, 0); ob.o.yaw = lerpAngle(ob.o.yaw, this.yaw, 1 - Math.exp(-3 * dt)); this.g.props.syncRoot(ob.o); } else if (ob.kind === 'boss') { ob.o.root.rotation.y = lerpAngle(ob.o.root.rotation.y, this.yaw + Math.PI, 1 - Math.exp(-3 * dt)); ob.o.yaw = ob.o.root.rotation.y; } else { ob.o.yaw = lerpAngle(ob.o.yaw, this.yaw + Math.PI, 1 - Math.exp(-3 * dt)); }
     if (h.stage === 'lift' && h.t >= h.dur) { h.stage = 'carry'; h.t = 0; }
     // very hard hit: he drops what he holds
     if (this.flinchT > 0.7) this.dropHold();
@@ -271,7 +276,7 @@ export function installWbPowers(Cls) {
   function lerpAngle(a, b, k) { return a + angleDelta(a, b) * k; }
   P.dropHold = function () {
     const h = this.hold; if (!h) return; this.hold = null; const ob = h.ob; if (ob.dead()) return;
-    if (ob.kind === 'prop') { this.g.props.release(ob.o, _a.set(0, 0, 0)); ob.o.state = 'fly'; ob.o.thrown = false; ob.o.wbThrown = false; } else { ob.o.held = false; ob.o.kv.set(0, 0, 0); ob.o.vy = 0; ob.o.air = Math.max(0.01, ob.o.air); ob.o.stagger = 0.8; }
+    if (ob.kind === 'prop') { this.g.props.release(ob.o, _a.set(0, 0, 0)); ob.o.state = 'fly'; ob.o.thrown = false; ob.o.wbThrown = false; } else if (ob.kind === 'boss') { ob.o.held = false;  if (ob.o.launch) ob.o.launch(0); } else { ob.o.held = false; ob.o.kv.set(0, 0, 0); ob.o.vy = 0; ob.o.air = Math.max(0.01, ob.o.air); ob.o.stagger = 0.8; }
   };
   P.releaseHold = function () {
     const h = this.hold; if (!h || this.act) return; if (h.stage === 'lift') return;
@@ -300,6 +305,7 @@ export function installWbPowers(Cls) {
     if (disc >= 0 && this.aimHit) th = Math.atan((v0 * v0 - Math.sqrt(disc)) / (G * dxz)); else if (!this.aimHit) th = 0.3;
     th = clamp(th, 0.04, 0.9); const vel = new THREE.Vector3(ux * Math.cos(th) * v0, Math.sin(th) * v0, uz * Math.cos(th) * v0);
     if (ob.kind === 'prop') { this.g.props.release(o, vel, new THREE.Vector3(rand(-3, 3), rand(-3, 3), rand(-3, 3))); o.state = 'fly'; o.wbThrown = true; o.dmgMul = 2.5; o.knockMul = 2; o.thrownMass = ob.mass; o.thrown = true; }
+    else if (ob.kind === 'boss') { o.held = false; _a.set(ux, 0, uz); const sp = clamp(v0 * 0.32, 14, 30); if (o.shove) o.shove(_a, sp); if (o.launch) o.launch(clamp(vel.y * 0.5, 7, 15)); if (o.applyHit) o.applyHit(c, _a.clone(), 40); o.thrownT = 2.5; this.stats.bossThrows = (this.stats.bossThrows || 0) + 1; }
     else { o.held = false; o.kv.set(vel.x, 0, vel.z); o.vy = vel.y; o.air = Math.max(0.05, c.y - o.h * 0.5); o.thrown = 1; o.thrownBy = this; o.stagger = 2; }
     this.g.camera.addTrauma(0.08 + 0.05 * clamp(Math.log10(ob.mass) - 2, 0, 3)); this.g.sfx.whoosh && this.g.sfx.whoosh(); this.g.sfx.crash && this.g.sfx.crash(0.18);
   };
@@ -322,7 +328,7 @@ export function installWbPowers(Cls) {
   P.grabHintUpdate = function (dt) {
     this.hint2T -= dt; if (this.hint2T > 0) return; this.hint2T = 0.15;
     let txt = ''; if (this.hold) txt = this.hold.stage === 'lift' ? '<b>LIFTING</b> ' + this.hold.name + ' (' + this.hold.massText + ')' : '<b>E</b> put down · <b>LMB</b> throw ' + this.hold.name.toLowerCase();
-    else if (!this.act && this.mode === 'ground') { const r = this.findGrab(false); if (r.best) { const ob = this.adapt(r.best); txt = ob.mass > MAXLIFT ? '<b>' + ob.name + '</b> · ' + massText(ob.mass) + ' - too heavy' : '<b>E</b> grab ' + ob.name.toLowerCase() + ' · ' + massText(ob.mass); } }
+    else if (!this.act && this.mode === 'ground') { const r = this.findGrab(false); if (r.best) { const ob = this.adapt(r.best); txt = ob.mass > (MAXLIFT*this.pwr) ? '<b>' + ob.name + '</b> · ' + massText(ob.mass) + ' - too heavy' : '<b>E</b> grab ' + ob.name.toLowerCase() + ' · ' + massText(ob.mass); } }
     this.hint(txt);
   };
 
@@ -365,6 +371,7 @@ export function installWbPowers(Cls) {
   };
   /** damage everything inside the sole rectangle (7 x 11.6 m) at (x, z) */
   P.crushFoot = function (x, z, yaw, dmg, st = 1) {
+    dmg *= this.pwr;
     const g = this.g, PS = g.props, hw = 3.5 * (st > 1.3 ? 1.3 : 1), hl = 5.8 * (st > 1.3 ? 1.2 : 1), c = cos(yaw), s = sin(yaw), inFoot = (px, pz, pad) => { const dx = px - x, dz = pz - z, lx = dx * c - dz * s, lz = dx * s + dz * c; return Math.abs(lx) < hw + pad && Math.abs(lz) < hl + pad; };
     for (const p of PS.props) { if (p.dormant || p.held || p.dead || p.pos.y > 4) continue; if (inFoot(p.pos.x, p.pos.z, Math.max(p.half.x, p.half.z) * 0.8)) { PS.hurt(p, dmg + 100); this.stats.crushed++; if (p.dead) this.fx.crashAt(p.center, 5, 0.05); else if (!p.planted) { PS.removeBox(p); p.state = 'fly'; p.vel.set(rand(-4, 4), 5, rand(-4, 4)); } } }
     for (const w of PS.walls) { if (!w.alive) continue; const b = w.entry; if (b.max.y > 12) continue; const cx = clamp(x, b.min.x, b.max.x), cz = clamp(z, b.min.z, b.max.z); if (inFoot(cx, cz, 0.6)) PS.damageWall(w, dmg * 1.2, new THREE.Vector3(cx, 1, cz), _e.set(cx - x, 0, cz - z).normalize().clone()); }
@@ -377,14 +384,14 @@ export function installWbPowers(Cls) {
   P.takeHit = function (dmg, pt, dir, impulse = 0, src = '') {
     if (!this.alive || !this.root.visible) return; const g = this.g, gd = this.guard ? 1 : 0, A = this.an;
     dmg *= gd ? 0.3 : 1; this.hp = Math.max(0, this.hp - dmg); this.hpT = 5; this.stats.hitsTaken++; this.lastHit = dmg;
-    const kv = (impulse / WB_MASS) * (gd ? 0.3 : 1);       // m/s he is pushed: impulse / his mass
+    const kv = (impulse / this.massW) * (gd ? 0.3 : 1);       // m/s he is pushed: impulse / his mass
     if (kv >= 2.4 && !(this.act && this.act.kind === 'stomp' && this.act.stage === 'slam')) {
       A.flinch = 1; A.flinchDir.set(dir.x, 0, dir.z); this.flinchT = clamp(0.5 + kv * 0.08, 0.5, 1.2); this.vel.x += dir.x * Math.min(kv * 2.2, 26); this.vel.z += dir.z * Math.min(kv * 2.2, 26); this.stats.flinches++; this.act = null; this.heavyCharge = 0; this.beamK = 0; this.fx.hideBeam();
       g.camera.addTrauma(0.45); g.camera.kick(0.05); g.hud.hurt(); g.sfx.crash(0.55); this.fx.skirt(this.pos.x, this.pos.z, 14, 8, 9, 1);
     } else if (dmg >= 12) { A.flinch = Math.max(A.flinch, 0.35 + (dmg > 40 ? 0.15 : 0)); A.flinchDir.set(dir.x, 0, dir.z); g.camera.addTrauma(0.08 + dmg / 800); if (dmg >= 80) g.hud.hurt(); g.sfx.hit(false); }
     else if (dmg > 0) { g.sfx.hit(false); }
     if (pt && dmg > 8) g.fx.glow.emit({ pos: pt, size: 10 + dmg * 0.1, life: 0.1, drag: 0, color: [1, 0.8, 0.5], alpha: 0.8 });
-    if (this.hp <= 0) { this.hp = this.cfg.hp * 0.5; g.hud.toast('WAY BIG REGENERATES'); this.flinchT = 1.2; A.flinch = 1; this.act = null; if (this.hold) this.dropHold(); }
+    if (this.hp <= 0) { this.hp = this.maxHp * 0.5; g.hud.toast('WAY BIG REGENERATES'); this.flinchT = 1.2; A.flinch = 1; this.act = null; if (this.hold) this.dropHold(); }
   };
   /** compat with the arena's turrets / guards (they call onHit(dmg, point, dir)): their small arms barely scratch him */
   P.onHit = function (dmg, pt, dir) { this.takeHit(Math.min(dmg, 14) * 0.25, pt, dir || _d.set(0, 0, 1), 0, 'small'); };
@@ -396,6 +403,7 @@ export function installWbPowers(Cls) {
     const X = _a.set(yawC, 0, -yawS), Zf = _b.set(yawS, 0, yawC); const Xv = X.clone(), Zv = Zf.clone();
     const rel = (sh, x, y, z) => sh.clone().addScaledVector(Xv, x).addScaledVector(Zv, z).add(V(0, y, 0));
     const set = (k, p, w = 1, pole = null) => { const s = k === 'L' ? 1 : -1; P_.armT[k] = { p, pole: pole || V(s * 0.6, -0.8, -0.25), w, poleW: 1 }; };
+    if (this.shipPose) { const sp = this.shipPose; set('L', sp.L, 1, V(0.7, -0.2, -0.3)); set('R', sp.R, 1, V(-0.7, -0.2, -0.3)); P_.curl.L = P_.curl.R = sp.curl; P_.d.chest[0] += sp.lean || 0; P_.d.spine[0] += (sp.lean || 0) * 0.5; return; }
     // ---- defensive stance (Ctrl): knees bent, forearms crossed in front of the chest
     if (A.gd > 0.02) {
       const w = A.gd; for (const k of SIDES) { const s = k === 'L' ? 1 : -1; set(k, this.W(-s * 5.5, 55, 17 + 2 * sin(t * 2 + s)), w, V(s * 0.3, 0.8, 0.3)); }
@@ -416,7 +424,7 @@ export function installWbPowers(Cls) {
       let p = wind, tw = 0, w = 1, lean = 0;
       if (a.stage === 'wind') { const u = ease(a.t / a.windT); const rest = rel(sh, s * 5, -29, 2.5); p = rest.lerp(wind, u); tw = u * 0.5; lean = -0.05 * u; }
       else if (a.stage === 'charge') { p = wind.clone(); p.y += 0.5 * sin(t * 40) * ch; p.x += 0.4 * sin(t * 33) * ch; tw = 0.5 + 0.35 * ch; lean = -0.1 * ch; }
-      else { const tgtv = a.dir.clone(), reach = Math.hypot(a.T.x - sh.x, a.T.y - sh.y, a.T.z - sh.z), L = Math.min(reach, ARM * 0.97), tip = sh.clone().addScaledVector(tgtv, L); const dur = a.sd;
+      else { const tgtv = a.dir.clone(), reach = Math.hypot(a.T.x - sh.x, a.T.y - sh.y, a.T.z - sh.z), L = Math.min(reach, (ARM*this.U) * 0.97), tip = sh.clone().addScaledVector(tgtv, L); const dur = a.sd;
         if (a.stage === 'strike') { const u = ease(a.t / dur); p = wind.clone().lerp(tip, u); tw = 0.5 - 1.15 * u; lean = 0.2 * u; a.last = p.clone(); } else { const u = a.stage === 'hold' ? 0 : ease(a.t / a.rd); p = (a.last || tip).clone(); p = p.lerp(rel(sh, s * 5, -29, 2.5), u); tw = -0.65 * (1 - u); lean = 0.2 * (1 - u); } }
       set(k, p, w, V(s * 0.5, -0.9, -0.2)); P_.curl[k] = 1.0;
       const op = rel(this.shW[o2], -s * -4, -16 + 5 * (a.stage === 'strike' ? 1 : 0), 10); set(o2, op, 1, V(-s * 0.6, -0.8, -0.3)); P_.curl[o2] = 0.9;

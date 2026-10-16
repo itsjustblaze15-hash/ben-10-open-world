@@ -80,7 +80,7 @@ export class WmPlayer {
     const want = _c.set(0, 0, 0).addScaledVector(fwd, input.moveY).addScaledVector(right, input.moveX); const hasInput = want.lengthSq() > 1e-4; if (hasInput) want.normalize();
     this.hasInput = hasInput; this.wantDir.copy(want); this.input = input; this.jumpBuffer = Math.max(0, this.jumpBuffer - dt); if (input.jump) this.jumpBuffer = 0.16;
     if (this.climb) { this.updateClimb(dt, input, camYaw, want, hasInput); return; }
-    this.scanClimb(dt);
+    this.wjAssist(dt); this.scanClimb(dt);
     const a = this.act, locked = a && a.lockMove, spd0 = Math.hypot(this.vel.x, this.vel.z);
     let top = (input.run ? R.run : R.walk) * (a ? (a.speedMul ?? 0.75) : 1); if (locked) top = 0;
     // high jump: crouch -> launch

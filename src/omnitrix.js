@@ -169,6 +169,7 @@ export class Omnitrix {
   }
   /** the timer ran out (or a test forced it): back to Ben where the alien stands */
   revert(how = 'timer') {
+    if (this.g && this.g.finale && this.g.finale.busy()) { if (how === 'timer') this.remaining = Math.max(this.remaining, 0.25); return; }       // V33: never cut an Ultimate evolve / ship grab / throw short
     if (this.state !== 'alien') return false; const g = this.g; this.how = how; if (how === 'manual') { this.stats.manualReverts++; if (this.hold) this.hold.done = true; } else this.hold = null;
     this.state = 'reverting'; this.t = 0; this.ben.protectLand = true; this.ben.omni.raise = 0; this.ben.omni.press = 0;
     this.tapQ = 0; g.chars.switchTo('ben'); if (!g.chars.pending && g.chars.id === 'ben') this.onReverted(); return true;

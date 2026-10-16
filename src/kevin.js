@@ -251,6 +251,7 @@ export class Kevin extends Dummy {
   // ============================================================================================================================ main update
   update(dt) {
     if (dt <= 1e-6) return;
+    if (this.held && !this.dead) { this.root.updateMatrixWorld(true); this.pend && (this.pend.n = 0); return; }       // V30: carried by Way Big - the hand drives it
     const g = this.g, cfg = this.cfg, ib = this.ib; this.t += dt; this._dt = dt;
     for (const k in this.cd) if (this.cd[k] > 0) this.cd[k] -= dt;
     this.superCd -= dt; this.flyCd -= dt; this.dodgeCd -= dt; this.recoverT -= dt; this.iframe -= dt; this.counterT -= dt; this.surprise -= dt; this.flinch = Math.max(0, this.flinch - dt * 2.6); this.pGraceT -= dt; this.confuse = Math.max(0, this.confuse - dt); this.hitFlash = Math.max(0, this.hitFlash - dt);

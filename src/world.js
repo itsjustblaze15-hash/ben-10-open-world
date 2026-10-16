@@ -91,33 +91,44 @@ export class World {
   buildSky() {
     const skyMat = new THREE.ShaderMaterial({
       side: THREE.BackSide, depthWrite: false, fog: false,
-      uniforms: { uSun: { value: new THREE.Vector3(0.45, 0.62, 0.35).normalize() } },
+      uniforms: { uSun: { value: new THREE.Vector3(0.45, 0.62, 0.35).normalize() }, uMoon: { value: new THREE.Vector3(-0.45, -0.62, 0.35).normalize() }, uTop: { value: new THREE.Vector3(0.13, 0.42, 0.86) }, uHor: { value: new THREE.Vector3(0.72, 0.88, 0.98) }, uGnd: { value: new THREE.Vector3(0.62, 0.80, 0.92) },
+        uGlow: { value: new THREE.Vector3(1, 0.5, 0.3) }, uTwi: { value: 0 }, uDay: { value: 1 }, uTime: { value: 0 } },       // V30: every colour is a uniform so the day / night cycle can drive the sky
       vertexShader: 'varying vec3 vD; void main(){ vD=normalize(position); gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
-      fragmentShader: `varying vec3 vD; uniform vec3 uSun;
+      fragmentShader: `varying vec3 vD; uniform vec3 uSun; uniform vec3 uMoon; uniform vec3 uTop; uniform vec3 uHor; uniform vec3 uGnd; uniform vec3 uGlow; uniform float uTwi; uniform float uDay; uniform float uTime;
         float h(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
+        float h3(vec3 p){ return fract(sin(dot(p,vec3(127.1,311.7,74.7)))*43758.5453); }
         float n(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f); return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x),f.y); }
         float fbm(vec2 p){ float a=.5,s=0.; for(int i=0;i<5;i++){ s+=a*n(p); p*=2.03; a*=.5; } return s; }
         void main(){
           vec3 d=normalize(vD); float y=d.y;
-          vec3 top=vec3(0.13,0.42,0.86), hor=vec3(0.72,0.88,0.98), gnd=vec3(0.62,0.80,0.92);
-          vec3 c = y>0.0 ? mix(hor,top,pow(clamp(y,0.,1.),0.55)) : mix(hor,gnd,clamp(-y*3.,0.,1.));
+          vec3 c = y>0.0 ? mix(uHor,uTop,pow(clamp(y,0.,1.),0.55)) : mix(uHor,uGnd,clamp(-y*3.,0.,1.));
+          vec2 sh=normalize(uSun.xz+1e-4), dh=normalize(d.xz+1e-4);
+          c += uGlow*uTwi*(0.25+0.9*pow(max(dot(sh,dh),0.),3.))*exp(-abs(y)*4.5);                 // sunrise / sunset band, strongest around the sun
+          float vis=smoothstep(-0.04,0.03,y);
           float sd=max(dot(d,normalize(uSun)),0.);
-          c += vec3(1.0,0.93,0.75)*(pow(sd,900.)*6.+pow(sd,24.)*0.28);
-          if(y>0.02){ vec2 uv=d.xz/(y+0.25)*1.6; float cl=smoothstep(0.52,0.86,fbm(uv+vec2(3.1,1.7))); c=mix(c,vec3(1.0),cl*0.9*smoothstep(0.02,0.25,y)); }
+          c += mix(vec3(1.0,0.93,0.75),vec3(1.0,0.62,0.35),uTwi)*(pow(sd,900.)*6.+pow(sd,24.)*0.28)*vis;
+          float nk=1.-uDay;
+          if(nk>0.01){
+            float md=max(dot(d,normalize(uMoon)),0.);
+            c += vec3(0.85,0.9,1.0)*(smoothstep(0.99935,0.9996,md)*1.4 + pow(md,200.)*0.35 + pow(md,18.)*0.06)*vis*nk;
+            if(y>0.0){ vec3 q=floor(d*170.); float s=h3(q); float tw=0.65+0.35*sin(uTime*2.6+s*90.); c += vec3(0.9,0.95,1.0)*step(0.9965,s)*tw*nk*smoothstep(0.0,0.25,y);
+              vec3 q2=floor(d*70.); float s2=h3(q2+7.); c += vec3(1.0,0.95,0.85)*step(0.9985,s2)*(0.7+0.3*sin(uTime*1.7+s2*60.))*nk*smoothstep(0.0,0.3,y)*1.5; }
+          }
+          if(y>0.02){ vec2 uv=d.xz/(y+0.25)*1.6; float cl=smoothstep(0.52,0.86,fbm(uv+vec2(3.1,1.7)+vec2(uTime*0.004,0.))); vec3 cc=mix(vec3(0.07,0.09,0.16),vec3(1.0),uDay); cc=mix(cc,uGlow*1.05,uTwi*0.5); c=mix(c,cc,cl*0.9*smoothstep(0.02,0.25,y)); }
           gl_FragColor=vec4(c,1.0);
         }`,
     });
     this.sky = new THREE.Mesh(new THREE.SphereGeometry(this.island ? 2800 : 400, 32, 16), skyMat);
     this.sky.renderOrder = -10; this.sky.frustumCulled = false; this.scene.add(this.sky);
-    this.sunDir = skyMat.uniforms.uSun.value.clone();
+    this.sunDir = skyMat.uniforms.uSun.value.clone(); this.skyMat = skyMat;
     // reflections for crystals/concrete come from this same sky
-    const envScene = new THREE.Scene(); envScene.add(new THREE.Mesh(new THREE.SphereGeometry(100, 32, 16), skyMat));
+    const envScene = new THREE.Scene(); this.envScene = envScene; envScene.add(new THREE.Mesh(new THREE.SphereGeometry(100, 32, 16), skyMat));
     const pm = new THREE.PMREMGenerator(this.renderer);
     this.envMap = pm.fromScene(envScene, 0.02).texture; this.scene.environment = this.envMap; pm.dispose();
     this.scene.fog = this.island ? new THREE.Fog(0xbcd9ef, 260, 1500) : new THREE.Fog(0xb7c8d8, 70, 230);
   }
   buildLights() {
-    this.scene.add(new THREE.HemisphereLight(0xd8ecff, this.island ? 0x7d8a6a : 0x6c6a66, this.island ? 0.9 : 0.55));
+    this.hemi = new THREE.HemisphereLight(0xd8ecff, this.island ? 0x7d8a6a : 0x6c6a66, this.island ? 0.9 : 0.55); this.scene.add(this.hemi);
     const sun = this.sun = new THREE.DirectionalLight(0xfff0d8, 3.4);
     sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
     const sc = sun.shadow.camera, sp = this.island ? 40 : 26; sc.left = -sp; sc.right = sp; sc.top = sp; sc.bottom = -sp; sc.near = 1; sc.far = this.island ? 220 : 140; this.shadowSpan = sp; this.sunDist = this.island ? 90 : 70;

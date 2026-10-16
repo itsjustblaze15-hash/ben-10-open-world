@@ -29,7 +29,7 @@ export class WbFx {
   beam(o, d, len, k) {
     // k 0..1: width / brightness envelope. The beam is a stretched cylinder from the chest emitter `o` along `d`
     for (const m of [this.beamOuter, this.beamMid, this.beamCore]) {
-      m.visible = k > 0.01; if (!m.visible) continue; const r = m.userData.r * (0.5 + 0.5 * k) * (1 + 0.06 * Math.sin(performance.now() * 0.05 + m.userData.r));
+      m.visible = k > 0.01; if (!m.visible) continue; const r = m.userData.r * ((this.g.wb && this.g.wb.U) || 1) * (0.5 + 0.5 * k) * (1 + 0.06 * Math.sin(performance.now() * 0.05 + m.userData.r));
       m.position.copy(o).addScaledVector(d, len / 2); _q.setFromUnitVectors(UP, d); m.quaternion.copy(_q); m.scale.set(r, len, r); m.material.opacity = (m === this.beamCore ? 0.95 : m === this.beamMid ? 0.6 : 0.4) * k;
     }
     this.beamOn = k > 0.01;

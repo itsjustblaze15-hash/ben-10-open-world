@@ -30,6 +30,10 @@ export class RjPlayer {
     this.hp = RCFG.hp; this.hpT = 0; this.tilt = 0; this.bank = 0; this.turnRate = 0; this.wetT = 0; this.wadeK = 0; this.dW = 0; this.exitLift = 0; this.breachT = 0; this.t = 0; this.wasWet = false; this.stepIdx = 0;
     this.env = 'LAND'; this.depth = 0; this.c = new THREE.Vector3(); this.pCam = { min: -0.28, max: 1.25 }; this.fx = { bub: 1, wake: 0, silt: 0, trail: 0, stroke: 0, drip: 0, wade: 0 };
     this.stats = { bites: 0, hits: 0, claws: 0, clawHits: 0, chomped: 0, entries: 0, exits: 0, breaches: 0, jumps: 0, landings: 0, dives: 0, maxDepth: 0, swimTime: 0, timeSwim: 0 };
+    // V31 NIGHT / UNDERWATER LURE GLOW: ONLY the tiny lure on his head (mesh3, 129 vertices, shares nothing but the body texture) gets its own material clone that can glow; the body materials are never touched
+    this.lure = rig.skinned.find(m => /^mesh3/.test(m.name)) || null; this.lureK = 0;
+    if (this.lure) { const lm = this.lure.material.clone(); lm.emissive = new THREE.Color(0.55, 0.88, 1.0); lm.emissiveIntensity = 0; this.lure.material = lm; }
+    this.lureLight = new THREE.PointLight(0xbfe6ff, 0, 7.5, 2); this.lureLight.castShadow = false; game.scene.add(this.lureLight); this._lv = new THREE.Vector3();
     this.initPowers(game);
     this.root.rotation.y = this.yaw; this.root.visible = false;
     this.root.updateMatrixWorld(true); this.poser.apply(this.anim.pose(0.016, this.animState(0.016))); this.root.updateMatrixWorld(true);
@@ -72,7 +76,7 @@ export class RjPlayer {
     if (was) this.g.hud.toast('ONLY RIPJAWS CAN DIVE');
     this.root.updateMatrixWorld(true);
   }
-  deactivate() { this.cancelAll(); this.root.visible = false; this.camSetup(false); }
+  deactivate() { this.cancelAll(); if (this.lureLight) this.lureLight.intensity = 0; if (this.lure) this.lure.material.emissiveIntensity = 0; this.lureK = 0; this.root.visible = false; this.camSetup(false); }
   camSetup(on) {
     const cam = this.g.camera, L = this.L; L.camMode = on; cam.floorFn = on ? (x, z) => L.camFloor(x, z) : null;
     if (!on) { cam.pitchMin = -0.28; cam.pitchMax = 1.25; } else { this.pCam.min = cam.pitchMin; this.pCam.max = cam.pitchMax; }
@@ -292,7 +296,16 @@ export class RjPlayer {
     if (!this.root.visible) { this.updateState(); return; }
     this.finalize(); const c = this.animState(), P = this.anim.pose(dt, c), a = this.act;
     this.anim.biteApply(P, a && a.kind === 'bite' ? a : null, c, dt); this.anim.clawApply(P, a && a.kind === 'claw' ? a : null, c, dt);
-    this.poser.apply(P); this.root.updateMatrixWorld(true); this.updateState(); this.fxUpdate(dt);
+    this.poser.apply(P); this.root.updateMatrixWorld(true); this.updateState(); this.fxUpdate(dt); this.lureUpdate(dt);
+  }
+  /** the lure glows (subtle blue-white) at night and when he is under water; a small light only illuminates the area near his head */
+  lureUpdate(dt) {
+    const g = this.g, night = g.dayNight ? g.dayNight.night : 0, uw = this.L && this.L.uw > 0.4 && this.mode === 'swim' ? 1 : 0, tgt = Math.max(night * 0.9, uw);
+    this.lureK += (tgt - this.lureK) * Math.min(1, dt * 4); const k = this.lureK * (0.9 + 0.1 * Math.sin(this.t * 3.1));
+    if (this.lure) this.lure.material.emissiveIntensity = k * 2.2;
+    if (this.lure && k > 0.02) { const L = this.lure; if (!L.userData.lc) { const geo = L.geometry; geo.computeBoundingBox(); const c = geo.boundingBox.getCenter(new THREE.Vector3()), si = geo.attributes.skinIndex; L.userData.lc = c; L.userData.li = si ? si.getX(0) : 0; }
+      const i = L.userData.li, sk = L.skeleton, b = sk.bones[i]; if (b) { this._lv.copy(L.userData.lc).applyMatrix4(L.bindMatrix).applyMatrix4(sk.boneInverses[i]).applyMatrix4(b.matrixWorld); this.lureLight.position.copy(this._lv); } else this.lureLight.position.copy(this.pos).y += 2.2; }
+    this.lureLight.intensity = 5.5 * k;
   }
   updateState() {
     const a = this.act, A = this.anim.s, m = this.mode, v = this.vel, sp3 = v.length();

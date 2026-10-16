@@ -8,6 +8,7 @@ import { clamp, lerp, easeOutCubic, easeOutBack, easeInOutCubic, rand, damp, smo
 
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _q = new THREE.Quaternion();
 const Z = new THREE.Vector3(0, 0, 1), UP = new THREE.Vector3(0, 1, 0), DOWN = new THREE.Vector3(0, -1, 0);
+export const SHIELD_DUR = 14;      // seconds a placed crystal wall stays (configurable)
 const TAU = Math.PI * 2;
 
 // ------------------------------------------------------------------------------------------ keyframes
@@ -121,8 +122,8 @@ export class PowerSet {
     else if (code === 'KeyE') { if (this.free() && this.grounded() && this.cd.e <= 0) this.startBuild(); }
     else if (code === 'KeyX') { if (this.free() && this.grounded() && this.cd.x <= 0) this.startCannon(); }
   }
-  keyUp(code) { if (code === 'KeyF' && this.act && this.act.kind === 'shield') this.act.held = false; }
-  releaseAll() { if (this.act && this.act.kind === 'shield') this.act.held = false; }
+  keyUp(code) { }
+  releaseAll() { }
 
   // ------------------------------------------------------------------------------------------ helpers
   flatAim() { if (this.act && this.act.kind === 'melee' && this.act.face !== undefined) return new THREE.Vector3(Math.sin(this.act.face), 0, Math.cos(this.act.face)); const d = this.g.camera.aimDir; const f = _v.set(d.x, 0, d.z); if (f.lengthSq() < 1e-6) f.set(Math.sin(this.g.dh.yaw), 0, Math.cos(this.g.dh.yaw)); return f.normalize().clone(); }
@@ -212,27 +213,40 @@ export class PowerSet {
     }
     this.shPane = new THREE.Mesh(new THREE.PlaneGeometry(5.4, 3.4), new THREE.MeshPhysicalMaterial({ color: 0x9bffe0, emissive: 0x16c27c, emissiveIntensity: 0.5, transparent: true, opacity: 0.0, side: THREE.DoubleSide, depthWrite: false, roughness: 0.05, metalness: 0.2 }));
     this.shPane.position.set(0, 1.7, 0.1); grp.add(this.shPane);
-    this.sh = { amt: 0, hp: 120, max: 120, broken: false, flash: 0, center: new THREE.Vector3(), yaw: 0, hx: 2.75, hy: 1.9, hz: 0.55 };
+    this.sh = { amt: 0, hp: 160, max: 160, broken: false, flash: 0, center: new THREE.Vector3(), yaw: 0, hx: 2.75, hy: 1.9, hz: 0.55, placed: null, age: 0, boxes: [] };
   }
-  startShield() { this.act = { kind: 'shield', t: 0, held: true }; this.noDash = true; this.shGrp.visible = true; this.g.hud.toast('CRYSTAL SHIELD — hold F'); this.stats.shield = (this.stats.shield || 0) + 1; }
+  /** V30: the crystal wall is PLACED in front of Diamondhead and stays where it is (SHIELD_DUR seconds), it does not follow him */
+  startShield() {
+    const g = this.g, P = g.dh, w = g.world, T = w.island && w.terrain, f = _v.set(Math.sin(P.yaw), 0, Math.cos(P.yaw)); let spot = null;
+    for (const d of [3.6, 2.8, 2.0]) { const x = P.pos.x + f.x * d, z = P.pos.z + f.z * d, y = T ? Math.max(T.height(x, z), P.pos.y - 1.5) : 0; const c = Math.cos(P.yaw), s2 = Math.sin(P.yaw); let ok = true; for (const u of [-2.4, 0, 2.4]) { const px = x + c * u, pz = z - s2 * u; if (w.island && w.staticsIn(px - 0.7, pz - 0.7, px + 0.7, pz + 0.7).some(b => b.max.y > y + 0.6 && b.min.y < y + 2.5)) ok = false; if (T && T.dl(px, pz) < 1) ok = false; } if (ok) { spot = { x, z, y }; break; } }
+    if (!spot) { g.hud.toast('NO ROOM FOR A CRYSTAL WALL'); this.cd.f = 0.6; return; }
+    const S = this.sh; this.removeShieldBoxes(); S.placed = { x: spot.x, z: spot.z, y: spot.y, yaw: P.yaw }; S.age = 0; S.hp = S.max; S.broken = false; S.amt = 0.001; S.yaw = P.yaw; S.center.set(spot.x, spot.y + S.hy, spot.z);
+    const c = Math.cos(P.yaw), s2 = Math.sin(P.yaw); for (const u of [-1.9, 0, 1.9]) { const cx = spot.x + c * u, cz = spot.z - s2 * u, hw = Math.abs(c) * 0.95 + Math.abs(s2) * 0.6, hd = Math.abs(s2) * 0.95 + Math.abs(c) * 0.6; const b = { min: new THREE.Vector3(cx - hw, spot.y, cz - hd), max: new THREE.Vector3(cx + hw, spot.y + 3.8, cz + hd), temp: 'crystalwall' }; g.world.boxes.push(b); S.boxes.push(b); }
+    this.act = { kind: 'shield', t: 0, held: false }; this.noDash = true; this.shGrp.visible = true; this.g.hud.toast('CRYSTAL WALL'); this.stats.shield = (this.stats.shield || 0) + 1; this.g.sfx.whoosh && this.g.sfx.whoosh();
+  }
+  removeShieldBoxes() { const B = this.g.world.boxes, S = this.sh; for (const b of S.boxes) { const i = B.indexOf(b); if (i >= 0) B.splice(i, 1); } S.boxes.length = 0; }
   updateShield(dt, a) {
     const P = this.g.dh, S = this.sh, t = a.t;
-    const hold = a.held || t < 0.35; a.dropT = hold ? 0 : (a.dropT || 0) + dt;
-    const raise = smoothstep(0, 0.16, t), drop = a.dropT ? smoothstep(0, 0.22, a.dropT) : 0;
-    this.layer.w = Math.min(raise, 1 - drop * 0.95);
+    const cast = 0.55; a.dropT = Math.max(0, t - 0.32);                       // a short placing gesture; the wall itself lives on without him
+    const raise = smoothstep(0, 0.12, t), drop = smoothstep(0.32, cast, t);
+    this.layer.w = Math.min(raise, 1 - drop * 0.97);
     const k = 0.04 * Math.sin(t * 9);
     this.layer.rot = { hips: [0.08, 0.15, 0], spine: [0.1, 0.12, 0], chest: [0.1, 0.25, 0], head: [0, -0.15, 0], uarmL: [-1.05 + k, 0.25, 0.65], farmL: [-1.45, 0, 0], handL: [-0.3, 0, 0], uarmR: [-0.5, 0, -0.5], farmR: [-1.1, 0, 0], thighL: [-0.3, 0, 0.18], shinL: [0.5, 0, 0], thighR: [0.22, 0, -0.18], shinR: [0.45, 0, 0] };
-    S.amt = damp(S.amt, hold && !S.broken ? 1 : 0, hold ? 7 : 16, dt);
-    if (S.broken) S.amt = 0;
     this.updateShieldMesh(dt);
-    if (!hold && S.amt < 0.02 || (S.broken && a.dropT > 0.2) || (!hold && a.dropT > 0.3)) { this.endShield(); }
+    if (t >= cast) { this.endShield(); }
   }
-  endShield() { this.act = null; this.noDash = false; this.cd.f = this.sh.broken ? 3.5 : 0.35; }
-  shieldActive() { return this.sh.amt > 0.55 && !this.sh.broken; }
+  /** the big bosses can wreck the wall: a strike that lands next to it costs it health once per swing */
+  bossBlowsOnWall(dt) {
+    const S = this.sh; if (!S.placed || S.broken) return;
+    for (const b of this.g.bossList || []) { if (!b.present || b.dead) continue; const a = b.act; if (!a || a.phase !== 'strike' || a._wallHit) continue; const p = b.pos || b.home; if (!p || Math.hypot(p.x - S.placed.x, p.z - S.placed.z) > 6.5) continue; a._wallHit = true; this.shieldAbsorb(S.center.clone(), new THREE.Vector3(-Math.sin(S.yaw), 0, -Math.cos(S.yaw)), 55); }
+  }
+  endShield() { this.act = null; this.noDash = false; this.cd.f = this.sh.broken ? 3.5 : 1.2; }
+  shieldActive() { return !!this.sh.placed && this.sh.amt > 0.55 && !this.sh.broken; }
   updateShieldMesh(dt) {
     const S = this.sh, P = this.g.dh;
-    const f = _v.set(Math.sin(P.yaw), 0, Math.cos(P.yaw)); S.yaw = P.yaw; S.center.set(P.pos.x + f.x * 2.5, P.pos.y + S.hy, P.pos.z + f.z * 2.5);
-    this.shGrp.position.set(P.pos.x + f.x * 2.5, P.pos.y, P.pos.z + f.z * 2.5); this.shGrp.rotation.y = P.yaw;
+    const pl = S.placed; if (pl) { S.age += dt; const left = SHIELD_DUR - S.age; S.amt = S.broken ? 0 : damp(S.amt, left > 0.9 ? 1 : 0, left > 0.9 ? 7 : 5, dt); if (left <= 0 || (S.broken && S.amt < 0.01)) { this.removeShieldBoxes(); S.placed = null; S.amt = 0; this.cd.f = Math.max(this.cd.f, 0.3); } else if (left < 0.9 && S.amt < 0.4 && S.boxes.length) this.removeShieldBoxes(); }
+    else S.amt = 0;
+    if (pl) { S.yaw = pl.yaw; S.center.set(pl.x, pl.y + S.hy, pl.z); this.shGrp.position.set(pl.x, pl.y, pl.z); this.shGrp.rotation.y = pl.yaw; }
     S.flash = Math.max(0, S.flash - dt * 4);
     this.shMat.emissiveIntensity = 0.9 + S.flash * 3.5; this.shMat.opacity = 0.74 + S.flash * 0.2;
     this.shPane.material.opacity = (0.12 + S.flash * 0.35) * clamp(S.amt * 1.2, 0, 1);
@@ -511,7 +525,7 @@ export class PowerSet {
     const L = this.layer; for (const k of Object.keys(this.cd)) this.cd[k] = Math.max(0, this.cd[k] - dt);
     this.comboWin = Math.max(0, this.comboWin - dt); if (!this.act && this.comboWin <= 0) this.comboIdx = 0;
     // shield regenerates while down
-    if (!(this.act && this.act.kind === 'shield')) { this.sh.hp = Math.min(this.sh.max, this.sh.hp + 45 * dt); if (this.sh.broken && this.cd.f <= 0) { this.sh.broken = false; this.sh.hp = this.sh.max * 0.6; } this.sh.amt = damp(this.sh.amt, 0, 14, dt); this.updateShieldMesh(dt); }
+    if (!(this.act && this.act.kind === 'shield')) { if (this.sh.broken && this.cd.f <= 0 && !this.sh.placed) { this.sh.broken = false; this.sh.hp = this.sh.max; } this.updateShieldMesh(dt); this.bossBlowsOnWall(dt); }
     for (const k of ['L', 'R']) { for (const [name, grp] of [['blade', this.blade], ['gaunt', this.gaunt]]) { const key = name + k, o = grp[k]; this.toolAmt[key] = this.act && this.act.kind === 'melee' ? this.toolAmt[key] : damp(this.toolAmt[key], 0, 14, dt); const u = easeOutBack(clamp(this.toolAmt[key], 0, 1)); o.grp.visible = this.toolAmt[key] > 0.01; if (name === 'blade') { o.grp.children[0].scale.set(0.85 * Math.max(0.001, u), 0.85 * Math.max(0.001, u), Math.max(0.001, u)); for (let i = 1; i < 3; i++) o.grp.children[i].scale.setScalar(Math.max(0.001, u)); } else o.grp.scale.setScalar(Math.max(0.001, u)); } }
     for (const m of this.arcs) { if (!m.visible) continue; const u = m.userData; u.t += dt; const k = u.t / u.dur; if (k >= 1) { m.visible = false; continue; } m.scale.setScalar(u.size * (0.5 + 0.7 * easeOutCubic(k))); m.material.opacity = 0.9 * (1 - k) * (1 - k); }
     for (let i = this.timers.length - 1; i >= 0; i--) { const tm = this.timers[i]; tm.t -= dt; if (tm.t <= 0) { this.timers.splice(i, 1); tm.fn(); } }

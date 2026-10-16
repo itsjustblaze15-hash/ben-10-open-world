@@ -76,9 +76,10 @@ export class Enemies {
     this.stats = { blocked: 0, reflected: 0, hitPlayer: 0 };
   }
   add(t) { this.turrets.push(t); return t; }
-  spawnBolt(origin, dir, owner, side = 'enemy') {
-    const mesh = new THREE.Mesh(this.geo, side === 'player' ? this.matP : this.matE); mesh.position.copy(origin); this.g.scene.add(mesh);
-    this.bolts.push({ mesh, pos: origin.clone(), prev: origin.clone(), dir: dir.clone(), speed: 21, life: 4, owner: side, src: owner, dmg: 24 });
+  spawnBolt(origin, dir, owner, side = 'enemy', opt = null) {      // V32: opt = { dmgP, kb, speed, scale, red } for the invasion robots / drones (default: the slow orange test bolt)
+    const mat = opt && opt.red ? (this.matI || (this.matI = new THREE.MeshBasicMaterial({ color: 0xff3a2a }))) : side === 'player' ? this.matP : this.matE;
+    const mesh = new THREE.Mesh(this.geo, mat); mesh.position.copy(origin); if (opt && opt.scale) mesh.scale.setScalar(opt.scale); this.g.scene.add(mesh);
+    this.bolts.push({ mesh, pos: origin.clone(), prev: origin.clone(), dir: dir.clone(), speed: opt && opt.speed || 21, life: 4, owner: side, src: owner, dmg: 24, dmgP: opt && opt.dmgP, kb: opt && opt.kb, red: !!(opt && opt.red) });
   }
   update(dt) {
     const g = this.g, fx = g.fx;
@@ -103,7 +104,7 @@ export class Enemies {
           b.dir.copy(back).add(new THREE.Vector3(rand(-0.02, 0.02), rand(-0.02, 0.02), rand(-0.02, 0.02))).normalize(); b.owner = 'player'; b.mesh.material = this.matP; b.speed = 36; b.life = 3; b.pos.copy(hit.point).addScaledVector(b.dir, 0.5); b.mesh.position.copy(b.pos);
           this.stats.blocked++; this.stats.reflected++; continue;
         }
-        if (hit.kind === 'player') { g.impact.hitPlayer(attackImpact({ damage: 14, knockbackForce: 3.4, staggerDuration: 0.22, ordinary: true, point: hit.point.clone(), dir: b.dir.clone(), fx: false })); this.stats.hitPlayer++; }
+        if (hit.kind === 'player') { g.impact.hitPlayer(attackImpact({ damage: b.dmgP ?? 14, knockbackForce: b.kb ?? 3.4, staggerDuration: 0.22, ordinary: true, point: hit.point.clone(), dir: b.dir.clone(), fx: false })); this.stats.hitPlayer++; }
         if (hit.kind === 'target') { const bd = b.dmg || 24; hit.target.applyHit(hit.point, b.dir, bd); g.hud.hit(hit.point, bd, hit.target); }
         for (let k = 0; k < 8; k++) fx.glow.emit({ pos: hit.point, vel: _v.set(rand(-1, 1), rand(-0.2, 1), rand(-1, 1)).normalize().multiplyScalar(rand(3, 8)), size: rand(0.2, 0.4), life: 0.35, drag: 2, color: b.owner === 'enemy' ? [1, 0.55, 0.2] : [0.4, 1, 0.7] });
         fx.glow.emit({ pos: hit.point, size: 2, life: 0.12, drag: 0, color: [1, 0.9, 0.7] });
@@ -111,7 +112,7 @@ export class Enemies {
         g.scene.remove(b.mesh); this.bolts.splice(i, 1); continue;
       }
       if (b.life <= 0) { g.scene.remove(b.mesh); this.bolts.splice(i, 1); continue; }
-      b.mesh.position.copy(b.pos); const col = b.owner === 'enemy' ? [1, 0.5, 0.15] : [0.3, 1, 0.6];
+      b.mesh.position.copy(b.pos); const col = b.red ? [1, 0.18, 0.1] : b.owner === 'enemy' ? [1, 0.5, 0.15] : [0.3, 1, 0.6];
       fx.glow.emit({ pos: b.pos, size: 0.9, life: 0.12, drag: 0, color: col, alpha: 0.9 });
       fx.glow.emit({ pos: b.pos, vel: _v.set(rand(-0.5, 0.5), rand(-0.5, 0.5), rand(-0.5, 0.5)), size: 0.4, life: 0.3, drag: 2, color: col, alpha: 0.8 });
     }

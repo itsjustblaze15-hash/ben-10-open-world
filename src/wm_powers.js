@@ -189,7 +189,7 @@ export const wmPowers = {
     if (this.hpT > 0) this.hpT -= dt; else if (this.hp < 380) this.hp = Math.min(380, this.hp + 25 * dt);
     const a = this.act; if (a) ({ bite: this.updateBite, claw: this.updateClaw, pounce: this.updatePounce })[a.kind].call(this, dt, a);
     if (!this.act && this.lmbHeld) this.tryBite();
-    const S = this.g.sense, on = S && S.on; if (this.hintEl) { const txt = this.climb ? 'CLIMBING · GRIP ' + Math.round(this.climb.grip * 100) + '%  ·  W/S climb  A/D shimmy  Space push off  E let go' : (!this.climb && this.nearClimb ? 'E — climb' : ''); if (this.hintEl.textContent !== txt) this.hintEl.textContent = txt; this.hintEl.hidden = !txt; }
+    const S = this.g.sense, on = S && S.on; if (this.hintEl) { const txt = this.climb ? (this.climb.charge > 0 ? 'WALL JUMP CHARGE ' + Math.round(this.climb.charge / 0.9 * 100) + '%  ·  release Space to launch (aim with the camera)' : 'CLIMBING  ·  W/S/A/D move  Shift fast  HOLD Space = charge wall jump  E let go') : (!this.climb && this.nearClimb ? 'E — climb' : ''); if (this.hintEl.textContent !== txt) this.hintEl.textContent = txt; this.hintEl.hidden = !txt; }
     void on;
   },
 

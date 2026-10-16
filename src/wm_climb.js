@@ -19,6 +19,17 @@ const GRIP = {
   none: { name: 'POLE', max: 1e4, speed: 2.2, drain: 0 },
 };
 const LAT = 1.1;
+/** V30 wall-jump tuning. Wildmutt: fast and agile; Four Arms (fa_wall.js) uses a heavier set. */
+export const WJ_WM = { speedShift: 3.0, chargeMax: 0.9, vertMin: 6, vertMax: 34, arcMin: 11, arcMax: 27, dur: [0.5, 1.0] };
+export const WJ_FA = { speedShift: 1.5, chargeMax: 1.1, vertMin: 3.5, vertMax: 16, arcMin: 9, arcMax: 17, dur: [0.6, 1.1] };
+/** what a released charge does: straight up the same wall (vertical) or an arc away from it toward the aimed wall (arc) */
+export function wallJumpPlan(g, C, charge, J) {
+  const c = Math.min(1, charge / J.chargeMax), d = g.cam3.getWorldDirection(new THREE.Vector3()), away = d.x * C.nx + d.z * C.nz;
+  if (away < 0.38 || (C.ax && Math.abs(d.y) > 0.8 && d.y > 0)) return { kind: 'vertical', H: J.vertMin + (J.vertMax - J.vertMin) * c, dur: J.dur[0] + (J.dur[1] - J.dur[0]) * c, c };
+  const sp = J.arcMin + (J.arcMax - J.arcMin) * c, v = new THREE.Vector3(d.x, Math.max(d.y, 0.22) + 0.18, d.z).normalize().multiplyScalar(sp);
+  if (v.x * C.nx + v.z * C.nz < 3) { v.x += C.nx * 3; v.z += C.nz * 3; }
+  return { kind: 'arc', v, c };
+}
 const _p = new THREE.Vector3();
 
 function gripOf(b) {
@@ -50,7 +61,7 @@ function hitRect(b, ox, oz, dx, dz, maxT) {
 }
 
 export const wmClimb = {
-  initClimb() { this.climb = null; this.nearClimb = false; this.climbScanT = 0; },
+  initClimb() { this.wjT = 0; this.climb = null; this.nearClimb = false; this.climbScanT = 0; },
 
   // ============================================================================================== finding something to climb
   /** @returns null (nothing there) | {ok:false,msg} | {ok:true, ...climb data} */
@@ -135,8 +146,8 @@ export const wmClimb = {
       if (C.st >= CL.grabT) { C.stage = 'up'; C.st = 0; at(C.u, CL.d0, C.h); this.dustAt(this.pawPos('FL', _p).clone(), 4, 0.7); g.sfx.thud(0.12); }
     } else if (C.stage === 'up') {
       face(18);
-      const sp = C.gp.speed * (0.5 + 0.5 * clamp(C.grip * 2, 0, 1));
-      C.vv = damp(C.vv, input.moveY * sp, 9, dt); C.vl = damp(C.vl, input.moveX * LAT * (C.gp.speed / 1.9), 9, dt);
+      const boost = input.run ? WJ_WM.speedShift : 1, sp = C.gp.speed * boost * (0.5 + 0.5 * clamp(C.grip * 2, 0, 1));       // V30: Shift = 2.5x climbing speed
+      C.vv = damp(C.vv, input.moveY * sp, 9, dt); C.vl = damp(C.vl, input.moveX * LAT * (C.gp.speed / 1.9) * (input.run ? 1.6 : 1), 9, dt);
       C.h += C.vv * dt; C.u = clamp(C.u + C.vl * dt * C.latSgn, C.ulo, Math.max(C.ulo, C.uhi)); if (C.ulo > C.uhi) C.u = (C.lo + C.hi) / 2;
       const mv = Math.max(Math.abs(C.vv) / Math.max(C.gp.speed, 0.1), Math.abs(C.vl) / LAT), still = mv < 0.12;
       C.grip = clamp(C.grip - C.gp.drain * dt * (still ? 0.55 : 1 + 0.7 * Math.abs(C.vl) / LAT) , 0, 1);
@@ -145,8 +156,15 @@ export const wmClimb = {
       if (C.h <= gb + 0.005) { C.h = gb; if (C.vv < -0.05 || input.moveY < 0) { this.beginDrop(C, 'down'); return; } }
       at(C.u, CL.d0, C.h);
       if (C.h >= C.top - CL.ledge) { C.stage = 'mantle'; C.st = 0; C.m = 0; C.h0 = C.h; C.mDur = 0.52 + 0.12 * clamp((C.top - C.h) / 2, 0, 1); this.g.sfx.whoosh && this.g.sfx.whoosh(); return; }
-      if (input.jump) { this.beginDrop(C, 'jump'); this.jumpBuffer = 0; return; }
+      // V30: hold Space = charge, release = launch (up the same wall, or across to another wall)
+      if (input.jumpHeld) { C.charge = Math.min(WJ_WM.chargeMax, (C.charge || 0) + dt); if (Math.random() < dt * 25) this.dustAt(_p.set(this.pos.x - C.nx * 0.2, this.pos.y + 0.6, this.pos.z - C.nz * 0.2), 1, 0.5); }
+      else if (C.charge > 0) { const ch = C.charge; C.charge = 0; if (ch < 0.12) { this.beginDrop(C, 'jump'); this.jumpBuffer = 0; return; } this.launchWall(C, ch, WJ_WM); if (!this.climb) return; }
       if (C.grip <= 0) { C.stage = 'slip'; C.st = 0; this.toast('GRIP LOST'); g.camera.addTrauma(0.12); return; }
+    } else if (C.stage === 'wjump') {
+      face(18); const J = C.wj, u = clamp(C.st / J.dur, 0, 1), e = 1 - Math.pow(1 - u, 2.2); C.h = J.h0 + J.H * e; C.vv = J.H / J.dur * (1 - u) * 0.6; C.ph += dt * 3.2;
+      at(C.u, CL.d0 + 0.18 * Math.sin(Math.PI * u), C.h); this.stepFX(C); if (Math.random() < dt * 40) this.dustAt(this.pawPos('FL', _p).clone(), 1, 0.6);
+      if (C.h >= C.top - CL.ledge) { C.stage = 'mantle'; C.st = 0; C.m = 0; C.h0 = C.h; C.mDur = 0.52; this.g.sfx.whoosh && this.g.sfx.whoosh(); return; }
+      if (u >= 1) { C.stage = 'up'; C.st = 0; C.vv = 0; C.grip = 1; this.g.sfx.thud && this.g.sfx.thud(0.2); }
     } else if (C.stage === 'mantle') {
       face(18); C.m = clamp(C.st / C.mDur, 0, 1);
       const mY = sm(clamp(C.m / 0.62, 0, 1)), mS = sm(clamp((C.m - 0.28) / 0.72, 0, 1));
@@ -174,6 +192,18 @@ export const wmClimb = {
       }
     }
     this.root.rotation.y = this.yaw; this.root.updateMatrixWorld(true);
+  },
+  /** release of a charged wall jump */
+  launchWall(C, charge, J) {
+    const g = this.g, plan = wallJumpPlan(g, C, charge, J); this.stats.wallJumps = (this.stats.wallJumps || 0) + 1; g.sfx.whoosh && g.sfx.whoosh(); g.camera.kick(0.02); g.camera.addTrauma(0.1);
+    if (plan.kind === 'vertical') { const top = C.top - CL.ledge - 0.2; C.wj = { h0: C.h, H: Math.max(1, Math.min(plan.H, top - C.h + 0.6)), dur: plan.dur }; C.stage = 'wjump'; C.st = 0; this.dustAt(_p.set(this.pos.x, this.pos.y, this.pos.z), 6, 1); return; }
+    this.climb = null; this.mode = 'air'; this.grounded = false; this.vel.copy(plan.v); this.yaw = Math.atan2(plan.v.x, plan.v.z); this.root.rotation.y = this.yaw; this.cd.e = 0.2; this.wjT = 2.4; this.an.tx = this.an.tz = 0; this.jumpFX && this.jumpFX();
+  },
+  /** after an arc launch: grab the first wall that comes within reach (building to building) */
+  wjAssist(dt) {
+    if (!(this.wjT > 0)) return; this.wjT -= dt; if (this.climb || this.mode !== 'air') { if (this.grounded) this.wjT = 0; return; }
+    const sp = Math.hypot(this.vel.x, this.vel.z); if (sp > 2) this.yaw = Math.atan2(this.vel.x, this.vel.z);
+    const r = this.findClimb(); if (r && r.ok) { this.wjT = 0; this.startClimb(r); }
   },
   /** claws biting into the face: a scrape of dust + a soft sound each time a paw plants */
   stepFX(C) {
