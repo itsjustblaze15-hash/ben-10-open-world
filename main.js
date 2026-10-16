@@ -43,9 +43,17 @@ import { SlimeSystem } from './src/slime.js';
 import { IslandWater } from './src/island/islandwater.js';
 import { buildIsland } from './src/island/index.js';
 import { Civilians } from './src/island/npcs.js';
+import { SurfaceSwim } from './src/island/swim.js';
 import { Traffic } from './src/island/traffic.js';
 import { installChaos } from './src/island/chaos.js';
 import { Minimap } from './src/island/minimap.js';
+import { DayNight } from './src/island/daynight.js';
+import { Destruct } from './src/island/destruct.js';
+import { TrainBots } from './src/island/trainbots.js';
+import { SeaBots } from './src/island/seabots.js';
+import { Mothership } from './src/island/mothership.js';
+import { Invasion } from './src/island/invasion.js';
+import { Finale } from './src/island/finale.js';
 import { Diver } from './src/diver.js';
 import { Guard } from './src/guards.js';
 import { Stealth } from './src/stealth.js';
@@ -68,6 +76,7 @@ import { buildAlbedoRig } from './animations/albedorig.js';
 import { AlbedoHuman } from './src/albedo_human.js';
 import { BossManager } from './src/bossmgr.js';
 import { Albedo } from './src/albedo.js';
+import { GameMenu } from './src/menu.js';
 
 const $ = id => document.getElementById(id);
 let game_island_ref = null;
@@ -235,10 +244,13 @@ const props = game.props = new PropSystem(game);
 }
 // ---- the lagoon (Ripjaws' water): replaces the old decorative pool with a real basin, swim volume, rocks, sunken props
 if (island) props.setSpawns(island.spawns);
-if (island) game.civ = new Civilians(game, island);
-if (island) game.traffic = new Traffic(game, island);
-if (island) { game.minimap = new Minimap(game, island); document.body.classList.add('island'); const cp = document.getElementById('controls'); if (cp) cp.classList.add('hide'); }   // the open world starts with the controls list folded (H opens it)
+if (island) { game.civ = new Civilians(game, island, 200); game.swim = new SurfaceSwim(game); }
+if (island) game.traffic = new Traffic(game, island, 44);
+if (island) { game.trainBots = new TrainBots(game, island); window.__bots = game.trainBots; }
+if (island) { game.destruct = new Destruct(game, island); window.__destruct = game.destruct; }
+if (island) { game.minimap = new Minimap(game, island); game.dayNight = new DayNight(game, island); window.__dayNight = game.dayNight; document.body.classList.add('island'); const cp = document.getElementById('controls'); if (cp) cp.classList.add('hide'); }   // the open world starts with the controls list folded (H opens it)
 const lagoon = game.lagoon = new IslandWater(game); lagoon.populate(props);   // V28: the whole island's sea / bay / river / lake (same API as the old lagoon)
+if (island) { game.seaBots = new SeaBots(game); window.__sea = game.seaBots; game.mothership = new Mothership(game, island, loadGLB); window.__ship = game.mothership; game.invasion = new Invasion(game); window.__inv = game.invasion; game.finale = new Finale(game, loadGLB); window.__fin = game.finale; game.destruct.holdFn = null; }   // V30 hostile underwater enemies
 game.fa = new FaPlayer(game, rigF);
 game.fire = new FireSystem(game);
 game.hb = new HbPlayer(game, rigH);
@@ -329,7 +341,7 @@ game.chars = new CharacterManager(game, {
   waybig: {
     name: 'WAY BIG', subtitle: 'GIANT TEST · ALL POWERS', movementType: 'giant', abilities: 'waybig', model: 'assets/waybig.glb',
     controller: game.wb, accent: '#ff6a4a', line: 'rgba(255, 106, 74, .42)', panels: WB_PANELS, cam: { height: 62, shoulder: 14, dist: 125, fov: 58, cs: 12, near: 2, far: 3000, minD: 24 },
-    onLeave() { game.wb.leave(); camRig.pitchMin = -0.28; camRig.pitchMax = 1.25; camRig.fix = null; },     // held objects are dropped, attacks end, the district is hidden and he is put on a legal arena spot BEFORE the next (human-sized) alien appears; the city keeps its state
+    onLeave() { if (game.finale) game.finale.deevolve(); game.wb.leave(); camRig.pitchMin = -0.28; camRig.pitchMax = 1.25; camRig.fix = null; },     // held objects are dropped, attacks end, the district is hidden and he is put on a legal arena spot BEFORE the next (human-sized) alien appears; the city keeps its state
     onEnter() { camRig.fix = (pos) => { if (!district.active) return; const id = district.cellAtPoint(pos.x, pos.y, pos.z); if (id >= 0) pos.y = district.topAt(pos.x, pos.z) + 3; pos.y = Math.max(pos.y, 4.2); }; },
   },
 }, 'ben');
@@ -439,7 +451,7 @@ addEventListener('keydown', e => {
   game.sfx.init();
   if (e.code === 'KeyV') edgeDash = true;
   if (active() && game.omni.key(e.code)) return;        // C = Omnitrix (menu / random / locked / recharging). While the selection interface is open it swallows every key (A / D rotate it, nothing moves Ben)
-  if (e.code === 'KeyT') { if (isX()) { if (active()) startTimeSlow(); } else if (!isFA() && !isUP()) resetDummies(); }
+  if (e.code === 'KeyT' && isWB() && game.finale && game.finale.onKey('KeyT')) { /* V33: evolve to Ultimate Way Big */ } else if (e.code === 'KeyT') { if (isX()) { if (active()) startTimeSlow(); } else if (!isFA() && !isUP()) resetDummies(); }
   if (e.code === 'Digit0') resetDummies();
   if (e.code === 'KeyJ' && world.island) hud.toast('NO TRAINING DUMMIES IN THE OPEN WORLD'); else if (e.code === 'KeyJ') { chaseOn = !chaseOn; for (const d of dummies) d.chase = chaseOn && game.enemyAI.ordinaryEnemiesEnabled ? chaseRef : null; for (const d of divers) d.chase = chaseOn && game.enemyAI.ordinaryEnemiesEnabled ? chaseRef : null; hud.toast('DUMMIES CHASE ' + (chaseOn ? 'ON' : 'OFF')); }
   if (e.code === 'KeyN') { camRig.shakeLevel = ((camRig.shakeLevel ?? 2) + 2) % 3; hud.toast('CAMERA SHAKE ' + ['OFF', 'LOW', 'FULL'][camRig.shakeLevel]); }
@@ -448,7 +460,7 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyH') $('controls').classList.toggle('hide');
   if (e.code === 'F3') { e.preventDefault(); dbgEl.classList.toggle('hide'); if (dbgEl.classList.contains('hide')) dbgEl.textContent = ''; else { dbgT = 0; debugPanel(0.1, true); } }
   if (e.code === 'KeyY') game.enemyAI.toggleOrdinary();
-  if (active() && !game.impact.blocksAttack) { if (isX()) game.xlr.keyDown(e.code); else if (isFA()) game.fa.keyDown(e.code); else if (isHB()) game.hb.keyDown(e.code); else if (isUP()) game.up.keyDown(e.code); else if (isWM()) game.wm.keyDown(e.code); else if (isGF()) game.gf.keyDown(e.code); else if (isRJ()) game.rj.keyDown(e.code); else if (isSF()) game.sf.keyDown(e.code); else if (isCB()) game.cb.keyDown(e.code); else if (isGM()) game.gm.keyDown(e.code); else if (isWB()) game.wb.keyDown(e.code); else game.p2.keyDown(e.code); }
+  if (active() && !game.impact.blocksAttack) { if (isX()) game.xlr.keyDown(e.code); else if (isFA()) game.fa.keyDown(e.code); else if (isHB()) game.hb.keyDown(e.code); else if (isUP()) game.up.keyDown(e.code); else if (isWM()) game.wm.keyDown(e.code); else if (isGF()) game.gf.keyDown(e.code); else if (isRJ()) game.rj.keyDown(e.code); else if (isSF()) game.sf.keyDown(e.code); else if (isCB()) game.cb.keyDown(e.code); else if (isGM()) game.gm.keyDown(e.code); else if (isWB()) { if (!(game.finale && game.finale.onKey(e.code))) game.wb.keyDown(e.code); } else game.p2.keyDown(e.code); }
 });
 addEventListener('keyup', e => { keys.delete(e.code); game.omni.keyUp(e.code); game.p2.keyUp(e.code); game.fa.keyUp(e.code); if (isHB()) game.hb.keyUp(e.code); if (isUP()) game.up.keyUp(e.code); if (isWM()) game.wm.keyUp(e.code); if (isGF()) game.gf.keyUp(e.code); if (isRJ()) game.rj.keyUp(e.code); if (isSF()) game.sf.keyUp(e.code); if (isCB()) game.cb.keyUp(e.code); if (isGM()) game.gm.keyUp(e.code); if (isWB()) game.wb.keyUp(e.code); });
 addEventListener('blur', () => { keys.clear(); game.omni.cancelHold(); game.ben.mouseUp(); game.wm.mouseUp(); game.gf.mouseUp(); game.rj.mouseUp(); game.sf.mouseUp(); game.cb.mouseUp(); game.gm.mouseUp(); game.wb.mouseUp(); game.power.release(); game.p2.releaseAll(); game.fa.setBlock(false); });
@@ -457,7 +469,7 @@ canvas.addEventListener('mousedown', e => {
   if (!active()) { if (freeMode) { paused = false; overlay.hidden = true; return; } lock(); return; }
   game.sfx.init(); if (game.impact.blocksAttack || game.omni.blocksInput) return;
   if (!isFA() && (isWM() || isRJ() || isGF() || isGM() || (isCB() && game.cb.form !== 'ball'))) { const P = game.player, a = meleeAim(game, P.pos, 5); if (a.target && P.root) { P.yaw = a.yaw; P.root.rotation.y = a.yaw; } }      // melee: face the crosshair target first
-  if (isBen()) game.ben.mouseDown(); else if (isX()) game.xlr.mouseDown(); else if (isFA()) game.fa.mouseDown(); else if (isHB()) game.hb.mouseDown(); else if (isUP()) game.up.mouseDown(); else if (isWM()) game.wm.mouseDown(); else if (isGF()) game.gf.mouseDown(); else if (isRJ()) game.rj.mouseDown(); else if (isSF()) game.sf.mouseDown(); else if (isCB()) game.cb.mouseDown(); else if (isGM()) game.gm.mouseDown(); else if (isWB()) game.wb.mouseDown(); else game.power.press();
+  if (isBen()) game.ben.mouseDown(); else if (isX()) game.xlr.mouseDown(); else if (isFA()) game.fa.mouseDown(); else if (isHB()) game.hb.mouseDown(); else if (isUP()) game.up.mouseDown(); else if (isWM()) game.wm.mouseDown(); else if (isGF()) game.gf.mouseDown(); else if (isRJ()) game.rj.mouseDown(); else if (isSF()) game.sf.mouseDown(); else if (isCB()) game.cb.mouseDown(); else if (isGM()) game.gm.mouseDown(); else if (isWB()) { if (!(game.finale && game.finale.onClick())) game.wb.mouseDown(); } else game.power.press();
 });
 addEventListener('mouseup', e => { if (e.button === 0) { game.ben.mouseUp(); game.power.release(); game.hb.mouseUp(); game.up.mouseUp(); game.wm.mouseUp(); game.gf.mouseUp(); game.rj.mouseUp(); game.sf.mouseUp(); game.cb.mouseUp(); game.gm.mouseUp(); game.wb.mouseUp(); } });
 addEventListener('contextmenu', e => { if (freeMode) e.preventDefault(); });
@@ -530,8 +542,9 @@ function step(dt, rdt = dt) {
   const X = isX(), F = isFA(), H = isHB(), U = isUP(), W = isWM(), G = isGF(), R = isRJ(), S = isSF(), C = isCB(), M = isGM(), B = isWB(), N = isBen(), P = game.player;
   game.chars.update(dt); game.omni.update(dt);
   game.impact.begin(inp); game.hb.updateShots(wdt, true); game.sf.updateShots(wdt, true);    // projectiles fired by Kevin (fire / goo) run in world time whatever alien is active
-  lagoon.blockOn = !R && !(X && P.waterRun);
+  lagoon.blockOn = !R; if (game.swim) game.swim.pre(game.chars.id, P);
   if (X || F || H || U || W || G || R || S || C || M || B || N) P.updatePhysics(pdt, inp, camRig.yaw); else P.updatePhysics(pdt, inp, camRig.yaw, combat);
+  if (game.swim) game.swim.post(pdt, game.chars.id, P);
   computeAim();
   const aim = game.power.update(pdt, aimPoint);
   const layer = game.p2.update(pdt, aimPoint);
@@ -541,6 +554,11 @@ function step(dt, rdt = dt) {
   props.stream(dt, activeCenters()); props.update(wdt); district.update(wdt);
   if (game.civ) { for (const b of game.bossList || []) if (b.present && !b.dead) { const bp = b.home || b.pos; if (bp && (b.st === 'combat' || b.chaosT > 0 || b.state === 'alien' || b.state === 'uw' || b.state === 'switching')) world.danger(bp.x, bp.z, 34, 2); } game.civ.update(dt); }
   if (game.traffic) game.traffic.update(wdt);
+  if (game.destruct) game.destruct.update(wdt);
+  if (game.trainBots) game.trainBots.update(wdt);
+  if (game.invasion) game.invasion.step(wdt);
+  if (game.finale) game.finale.step(wdt);
+  if (game.seaBots) game.seaBots.update(wdt);
   game.fire.update(wdt);
   game.tech.update(dt); game.gmt.tick(dt);
   if (X || F || H || U || W || G || R || S || C || M || B || N) P.updateAnim(pdt); else P.updateAnim(pdt, aim, layer);
@@ -613,6 +631,10 @@ function step(dt, rdt = dt) {
   } else { camRig.speedFov = damp(camRig.speedFov, 0, 6, dt); camRig.distBonus = damp(camRig.distBonus, 0, 6, dt); }
   camRig.update(dt, P.pos);
   lagoon.update(dt, camera, renderer); if (world.terrain) world.terrain.update(dt, camera.position); if (game_island_ref) game_island_ref.update(dt, camera.position); if (game.minimap) game.minimap.update(dt);
+  if (game.dayNight) game.dayNight.update(dt, camera);
+  if (game.mothership) game.mothership.update(dt, camera);
+  if (game.invasion) game.invasion.visual(dt);
+  if (game.finale) game.finale.visual(dt);   // V31: spaceship approach (world clock only)
   world.sky.position.copy(camera.position); world.followSun(P.pos);
   fx.shards.update(wdt); fx.fire.update(wdt, renderer, camera); fx.smoke.update(wdt, renderer, camera); fx.glow.update(dt, renderer, camera); fx.dust.update(dt, renderer, camera); fx.surface.update(dt);
   hud.crosshair.classList.toggle('hot', aimOnTarget);
@@ -724,18 +746,44 @@ let last = performance.now();
 function frame(now) {
   requestAnimationFrame(frame);
   const raw = (now - last) / 1000, dt = Math.min(raw, 1 / 20); last = now;
+  if (menu && menu.on) { if (!menu.busy) { try { menu.frame(dt); } catch (e) { if (!window.__menuErrs) window.__menuErrs = 0; if (window.__menuErrs++ < 5) console.error('menu frame error (contained):', e); } } if (!window.__DH_NORENDER) renderFrame(); return; }     // V34: the main menu runs ONLY its own light scene update: no step(), no AI, no invasion, no combat
   if (window.__DH_MANUAL) { debugPanel(dt); if (!window.__DH_NORENDER) renderFrame(); return; }     // automated tests step the simulation themselves
-  if (!paused || debugForce) { step(paused ? 0 : dt, paused ? 0 : Math.min(raw, 0.5)); } else { camRig.update(0, game.player.pos); }
+  if (!paused || debugForce) { try { step(paused ? 0 : dt, paused ? 0 : Math.min(raw, 0.5)); } catch (e) { if (!window.__stepErrs) window.__stepErrs = 0; if (window.__stepErrs++ < 5) console.error('step error (contained, frame still renders):', e); } } else { camRig.update(0, game.player.pos); }   // V31: one failing system can no longer freeze the screen
   debugPanel(dt);
   renderFrame();
 }
-$('loading').hidden = true; $('hud').hidden = false; overlay.hidden = false;
+// ---- V34: cinematic startup screen / main menu / pause menu (src/menu.js). Automated tests (__DH_MANUAL) skip it unless ?menu=1. Everything it needs from this file goes through `ctl`.
+let menu = null;
+if (!window.__DH_MANUAL || new URLSearchParams(location.search).get('menu') === '1') {
+  const startPos = game.ben.pos.clone(), startYaw = game.ben.yaw;
+  const quiet = fn => { const t = hud.toast; hud.toast = () => {}; try { return fn(); } finally { hud.toast = t; } };
+  const ctl = {
+    camera, camRig, renderer, world, lagoon, island: game_island_ref, releaseHeldInput,
+    started: () => started, playing: () => (locked || freeMode) && !paused,
+    resume() { if (freeMode) { paused = false; overlay.hidden = true; } else { relockT = performance.now(); lock(); } },       // the click that pressed RESUME / PLAY / CONTINUE captures the mouse
+    beginPlay() { relockT = -1e9; if (freeMode) { paused = false; overlay.hidden = true; } else lock(); },
+    sfxInit() { game.sfx.init(); }, camYaw: () => camRig.yaw, setCamYaw(v) { camRig.yaw = v; },
+    useBen() { if (game.chars.id !== 'ben') { game.chars.switchTo('ben'); game.chars.finishSwap(); } },
+    setRenderScale(s) { renderer.setPixelRatio(Math.min(window.devicePixelRatio * s, 2)); resize(); },
+    stream(n, useCam) { if (!useCam) camRig.update(0, game.player.pos, true); world.updateActive(0.1, activeCenters()); for (let i = 0; i < n; i++) { if (world.terrain) world.terrain.update(0.1, camera.position); if (game_island_ref) game_island_ref.update(0.1, camera.position); } renderFrame(); },
+    snapCamera() { camRig.update(0, game.player.pos, true); },
+    resetWorld() { releaseHeldInput(); quiet(resetDummies); },
+    newPlayer() {       // a NEW game: Ben at the normal start, Omnitrix ready, nothing carried over
+      ctl.useBen(); const B = game.ben, om = game.omni; om.hold = null; om.state = 'ready'; om.cd = 0; om.remaining = 0; om.free = false; om.renderHud && om.renderHud(true);
+      B.pos.copy(startPos); B.vel && B.vel.set(0, 0, 0); B.yaw = startYaw; B.root.position.copy(startPos); B.root.rotation.y = startYaw; B.root.updateMatrixWorld(true);
+      camRig.yaw = 0; camRig.pitch = 0.22; releaseHeldInput(); camRig.update(0, B.pos, true);
+    },
+  };
+  menu = new GameMenu(game, ctl); game.menu = menu;
+}
+$('loading').hidden = true; $('hud').hidden = false; overlay.hidden = !!menu;
 try { game.gf.prewarm(renderer, scene, camera); } catch (e) { console.warn('ghost prewarm skipped', e); }
 try { game.rj.prewarm(renderer, scene, camera); const rv = lagoon.rays.map(m => m.visible), mv = lagoon.motes.points.visible; lagoon.rays.forEach(m => { m.visible = true; }); lagoon.motes.points.visible = true; renderer.render(scene, camera); lagoon.rays.forEach((m, i) => { m.visible = rv[i]; }); lagoon.motes.points.visible = mv; } catch (e) { console.warn('ripjaws prewarm skipped', e); }
 try { game.sf.prewarm(renderer, scene, camera); } catch (e) { console.warn('stinkfly prewarm skipped', e); }
 try { game.cb.prewarm(renderer, scene, camera); } catch (e) { console.warn('cannonbolt prewarm skipped', e); }
 try { game.gm.prewarm(renderer, scene, camera); } catch (e) { console.warn('greymatter prewarm skipped', e); }
 try { game.wb.prewarm(renderer, scene, camera); } catch (e) { console.warn('waybig prewarm skipped', e); }
+if (menu) menu.open();
 window.__DH_READY = true;
 requestAnimationFrame(frame);
 
@@ -751,6 +799,6 @@ window.DH = {
   /** step without rendering; cb(t) after each step (used by the timing checks) */
   tick(sec, dt = 1 / 60, cb = null) { debugForce = true; paused = false; let t = 0; for (let i = 0; i < Math.round(sec / dt); i++) { step(dt, dt); t += dt; if (cb && cb(t) === false) break; } return t; },
   startTimeSlow, resetDummies, debugText() { dbgT = 0; debugPanel(0.2, true); return $('debug').textContent; }, reportX, rigX, reportF, rigF, props, reportH, rigH, reportU, rigU,
-  render() { renderFrame(); }, kevin, vilgax, albedo, bosses: game.bosses, setBossMenu, rigV, rigK, reportK, reportW, rigW, sense: game.sense, gf: game.gf, guards: game.guards, stealth: game.stealth, reportG, rigG, isGF,
+  render() { renderFrame(); }, menu, kevin, vilgax, albedo, bosses: game.bosses, setBossMenu, rigV, rigK, reportK, reportW, rigW, sense: game.sense, gf: game.gf, guards: game.guards, stealth: game.stealth, reportG, rigG, isGF,
   ben: game.ben, omni: game.omni, rigBen, reportBen, isBen, rj: game.rj, lagoon, divers, reportR, rigR, isRJ, renderer, sf: game.sf, slime: game.slime, reportS, rigS, isSF, cb: game.cb, reportC, reportB, rigC, isCB, cbWorld, gm: game.gm, gmt: game.gmt, rigM, isGM, gmWorld, wb: game.wb, district, wbFx, rigWb, reportWb, isWB,
 };

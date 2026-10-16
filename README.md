@@ -1,4 +1,15 @@
-# V29 — Omnitrix FREEDOM + CYCLE, faster aliens, bigger crowds
+# V30 — Ultimate World & Gameplay Expansion
+
+New in V30 (all added to the existing game; GLB models untouched):
+- **Destructible, regenerating buildings** (src/island/destruct.js): every city/suburb/industrial building takes damage from alien attacks (stages: cracks, breach, collapse -> rubble), then rebuilds after 2-4 min. `?regen=min,max` (seconds), `?nodestruct=1` disables.
+- **Training robots** (src/island/trainbots.js): hostile patrol/chase/attack/block/counter robots at ~14 training posts, pool of 8, respawn 2-4 min (`?botres=min,max`). Way Big can grab & throw them.
+- **Hostile underwater enemies** (src/island/seabots.js): "Reef Hunters" in deep water, max 5, respawn 2-4 min (`?seares=min,max`); Ripjaws bites/claws them. Separate from the Boss Manager.
+- **Swimming** (src/island/swim.js): all aliens swim on the surface; only Ripjaws (and Vilgax/Albedo forms) dive. XLR8 runs on water above ~22 m/s. Way Big wades with splashes.
+- **Climbing**: Wildmutt wall climb + wall jumps, Four Arms wall climb/jump (src/fa_wall.js), Heatblast rock-platform flight (src/hb_rock.js), Heatblast alternating punches, Cannonbolt bounce/knockback, Way Big grab & throw, Diamondhead crystal wall.
+- **Dynamic day/night** (src/island/daynight.js) with automatic lighting + a clock under the minimap. `?time=HH`, `?day=minutes` set the clock.
+- Roads hug the terrain (no floating/buried ribbons); traffic increased, parking reduced.
+
+## (previous) V29 — Omnitrix FREEDOM + CYCLE, faster aliens, bigger crowds
 - **Omnitrix modes** (pause card, same selector): CUSTOM · RANDOM · FREEDOM · CYCLE. Custom / Random are unchanged (2:00 / 1:00, hold C reverts).
   FREEDOM: tap C opens the selector (also while transformed), picks switch alien-to-alien directly, no timer / cooldown, health is carried over (not refilled), hold C (~1 s) = Ben.
   CYCLE: tap C = instantly the next alien (Diamondhead → XLR8 → Four Arms → Heatblast → Upgrade → Wildmutt → Ghostfreak → Ripjaws → Stinkfly → Cannonbolt → Grey Matter → Way Big → Diamondhead), from Ben the first tap is Diamondhead, hold C = Ben (cycle restarts). No Ultimate Wildmutt / Feedback.
@@ -549,3 +560,31 @@ Credit: "Ben 10" by gaddiellartey2010 (CC-BY-4.0, Sketchfab) — `assets/ben.glb
 - **Albedo** (`albedo_ai.js` / `albedo.js`): alien forms now sidestep / hop away (cooldown), Four Arms raises his real guard (key L), and a successful block or dodge can be followed by an immediate counter with the current alien's own moves. Alien switching and the shared timers are untouched.
 - Knockback is still decided by each attacker (`shove`/`applyHit`) and the boss's mass: Ben < Four Arms < Way Big; no ragdoll, no spin (checked), bodies stay upright and recover.
 **Honest limits:** Albedo's Diamondhead shield / Heatblast protection are not used defensively; blocking/dodging are probabilistic so single fights vary; numbers above come from a scripted "punch machine" (hits at fixed intervals) plus normal AI, not from a human playing.
+
+
+## V31 — Cannonbolt fix, night glow, Four Arms, structures, world map, spaceship event, time speed
+- **Cannonbolt freeze (root cause):** a `//` comment had swallowed the `const MU = {...}` friction table in `src/cb_ball.js`, so every bounce threw a ReferenceError and the frame loop aborted before rendering. Restored, added NaN / fall-speed guards, and the frame step is now wrapped in try/catch so one failing system can never freeze the render. 3 x 50 jump/land cycles were run with no errors.
+- **Night glow:** Heatblast's body, hands, flames and fireballs light him and the ground around him (stronger at night). Ripjaws' small head lure glows blue-white (night / underwater) and nothing else on him changed.
+- **Four Arms:** faster run (11.6 m/s, still well under XLR8's 16 / 44) and a charged ground super jump: hold Space to crouch and charge, release to leap (about 4 m short, 10 m mid, 18 m full charge in testing). Climbing and wall jumps were re-tested and still work.
+- **Buildings:** support graph. A floor loses its support when the one below is destroyed, then drops and crumbles in a cascade; regeneration is kept.
+- **World:** wider skyline (more tower blocks plus a third setback on the tallest), extra pocket park, playground and yard greenery in the suburbs, varied ground patches and props in the industrial area, scenic viewpoints along the mountain road, more pedestrians (200) and cars (44) with distance activation.
+- **Heatblast rock platform:** compact flat-topped stone deck with glowing cracks, nozzle fire, a speed trail, orbiting pebbles and a gentle tilt (his GLB is untouched).
+- **World map (Tab):** full-screen map with drag-pan, wheel / +/- zoom, C to centre, region and landmark labels, a scale bar, a layer legend (click to hide layers) and enemy markers (bosses, training-robot sites and active bots, underwater enemies, turrets), clustered with a count when zoomed out. The round minimap is unchanged.
+- **Spaceship event:** the supplied ship model (decimated copy, `assets/mothership_game.glb`) starts far south and approaches over 10 in-game days, then hovers above the exact centre of Main City. It never attacks, spawns nothing and triggers no invasion. Progress is saved in the browser. URL options: `?shipday=N`, `?ship=reset`, `?time=`, `?timescale=`.
+- **Time speed:** pause card, WORLD SETTINGS: 0.5x, 1x, 2x, 5x, 10x, 50x, 100x. Only the world clock accelerates (not characters, combat or physics). A "DAY n / 10" counter sits under the minimap clock.
+
+## V32 — Vilgax invasion (on top of the V31 spaceship)
+- **State machine (`src/island/invasion.js`):** APPROACHING (world days 0–10) → ARRIVING (ship stops over Main City) → INVASION_ACTIVE (robots + missiles, ~1 world day) → VILGAX_DESCENDING (world day 11, a beam opens under the ship) → VILGAX_ACTIVE. Every transition fires once and only forwards; `landed` / `dismissed` are saved (`ben10.invasion.v32`), so reloads never replay it or spawn a second Vilgax. Milestones use the WORLD clock (so 0.5x–100x move them); waves, missiles, AI and physics run on gameplay time, so 100x never floods the map.
+- **Ship:** now 460 m long (about the length of Main City), parked at 330 m, engine glow + blinking underside lights, a soft ground shadow that follows the sun and a local light dimming under it (not map-wide). The GLB is unchanged.
+- **Robots (`src/invasion_robots.js`, procedural, pooled, dark green / deep red / black, red sensors):** flying Attack Drone (fragile, hovers/strafes/shoots, dodges), Invasion Robot (shoots, punches, blocks, counters), Heavy Assault Robot (1.5x, telegraphed heavy punches, big knockback), Giant Enforcer (2.4x, far smaller than Way Big and weaker than Vilgax, telegraphed ground slam with a red floor ring, triple bolts). They detect by range + line of sight + field of view, search briefly, threaten civilians, and are pooled with population caps (8 / 6 / 3 / 2).
+- **Missiles (`src/missiles.js`):** pooled (max 6), visible flight with trails and a red ground warning ring, cartoon explosion via the existing fire/destruction systems, buildings damaged (not all: strikes shift to open ground once ~22% of the city is in ruins), temporary fires (capped), civilians flee, regeneration is delayed near fresh impacts.
+- **Vilgax:** the existing instance (Boss Manager unchanged). He descends through the beam, lands on valid ground near the centre, then hunts the player; his escort (heavy / standard / drone / giant) is the only force that tracks the player island-wide. A manually spawned Vilgax is never duplicated; a despawned one is not recreated.
+- **HUD / map:** small status pill (top, clear of the health bar, Omnitrix and minimap); the full map shows ship, drones, robots, heavy, giants, impacts and the landing point, with an INVASION legend toggle.
+- **Honest limits:** robots use the training-robot rig scaled/recoloured (no new GLBs); the ship does not cast a real shadow-map shadow (decal + dimming); missile and robot numbers are tuned by feel, not balanced against every alien.
+
+## V33 — Ultimate Way Big & Vilgax invasion finale
+- Robots: provoked robots retaliate at once (block / dodge / counter, poise against stun-lock); after Vilgax arrives every invasion robot knows where the player is (spaced slots around the player).
+- Missiles: much bigger blasts (fireballs, shock rings, smoke, debris, scorch, cracked roads), more districts hit, some towers collapse / burn; the city is not erased.
+- Vilgax retreats into the ship at 300 HP (beam lift), stays aboard; state machine extended (VILGAX_RETREATING, VILGAX_ABOARD, MOTHERSHIP_GRABBED, MOTHERSHIP_THROWN, MOTHERSHIP_CRASHED, INVASION_DEFEATED), saved.
+- Way Big -> button / key **T** "ULTIMATE WAY BIG" (only while you control Way Big): 3.4 s transformation, supplied model `assets/ultimate_waybig.glb`, 2x damage / throw strength, size from the ship (chest = ship main-body height).
+- Finale: Ultimate Way Big near the ship after Vilgax is aboard: **E** grab, **E / click** throw into the southern ocean, splash, partial sink, permanent wreck, "VILGAX INVASION DEFEATED".
