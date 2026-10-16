@@ -38,6 +38,7 @@ export class IslandWater extends Lagoon {
   keepOut(p, r) { this.pushShore(p, 0.7); }
   /** every ground walker except Ripjaws (and a water-running XLR8): may wade to ~1 m deep, then slides back toward the shore */
   blockDeep(p, r) {
+    if (this.allowPos && (p === this.allowPos || Math.hypot(p.x - this.allowPos.x, p.z - this.allowPos.z) < 3.2)) return;                       // V30: surface swimmers / XLR8 water-running may enter deep water
     const d = this.depthAt(p.x, p.z); if (d <= 1.0) return; this.pushShore(p, 1.0);
     if (p === this.g.player.pos && this.blockT <= 0) { this.blockT = 2.5; this.g.hud.toast('TOO DEEP — ONLY RIPJAWS CAN DIVE'); }
   }
@@ -80,14 +81,14 @@ export class IslandWater extends Lagoon {
     const data = new Uint16Array(T.nx * T.nz); for (let i = 0; i < data.length; i++) data[i] = THREE.DataUtils.toHalfFloat(T.H[i]);
     const ht = new THREE.DataTexture(data, T.nx, T.nz, THREE.RedFormat, THREE.HalfFloatType); ht.magFilter = ht.minFilter = THREE.LinearFilter; ht.wrapS = ht.wrapT = THREE.ClampToEdgeWrapping; ht.needsUpdate = true; this.heightTex = ht;
     const S = 5200, geo = new THREE.PlaneGeometry(S, S, 260, 260); geo.rotateX(-Math.PI / 2); geo.translate((BOUNDS.x0 + BOUNDS.x1) / 2, waterY, (BOUNDS.z0 + BOUNDS.z1) / 2);
-    this.surfU = { uTime: this.U.uTime, uRip: { value: this.rips }, uSun: { value: this.world.sunDir.clone() }, uK: { value: 0 }, uH: { value: ht }, uGrid: { value: new THREE.Vector4(T.x0, T.z0, (T.nx - 1) * T.cell, (T.nz - 1) * T.cell) }, uWaterY: { value: waterY } };
+    this.surfU = { uTime: this.U.uTime, uRip: { value: this.rips }, uSun: { value: this.world.sunDir.clone() }, uK: { value: 0 }, uH: { value: ht }, uGrid: { value: new THREE.Vector4(T.x0, T.z0, (T.nx - 1) * T.cell, (T.nz - 1) * T.cell) }, uWaterY: { value: waterY }, uDay: { value: 1 }, uHazeC: { value: new THREE.Vector3(0.72, 0.86, 0.95) } };
     const mat = new THREE.ShaderMaterial({
       uniforms: this.surfU, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false,
       vertexShader: `uniform float uTime; uniform vec4 uRip[8]; varying vec3 vW; varying vec3 vN;
         float rip(vec2 p){ float h=0.0; for(int i=0;i<8;i++){ vec4 r=uRip[i]; if(r.w<=0.0) continue; float d=length(p-r.xy); float f=r.z*2.4; h+=sin((d-f)*7.0)*exp(-abs(d-f)*2.2)*exp(-r.z*1.1)*r.w*0.07; } return h; }
         float Hh(vec2 p){ return 0.05*sin(p.x*0.35+uTime*0.9)+0.04*sin(p.y*0.42-uTime*0.8+1.3)+0.02*sin((p.x+p.y)*1.1+uTime*1.6)+rip(p); }
         void main(){ vec3 p=position; float e=0.4; float h=Hh(p.xz); float hx=Hh(p.xz+vec2(e,0.0)); float hz=Hh(p.xz+vec2(0.0,e)); vN=normalize(vec3(-(hx-h)/e,1.0,-(hz-h)/e)); p.y+=h; vW=p; gl_Position=projectionMatrix*viewMatrix*vec4(p,1.0); }`,
-      fragmentShader: `uniform float uTime; uniform vec3 uSun; uniform sampler2D uH; uniform vec4 uGrid; uniform float uWaterY; varying vec3 vW; varying vec3 vN;
+      fragmentShader: `uniform float uTime; uniform vec3 uSun; uniform sampler2D uH; uniform vec4 uGrid; uniform float uWaterY; uniform float uDay; uniform vec3 uHazeC; varying vec3 vW; varying vec3 vN;
         float th(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
         float tn(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f); return mix(mix(th(i),th(i+vec2(1,0)),f.x),mix(th(i+vec2(0,1)),th(i+vec2(1,1)),f.x),f.y); }
         void main(){
@@ -108,7 +109,7 @@ export class IslandWater extends Lagoon {
             a=clamp(mix(0.38,0.97,smoothstep(0.0,5.0,depth))+fres*0.25+foam,0.0,1.0); }
           else { float k=pow(1.0-ndv,2.0); float glare=pow(max(dot(-V,uSun),0.0),10.0)*0.5; col=mix(vec3(0.07,0.46,0.54),vec3(0.38,0.82,0.86),k)+vec3(0.5,0.85,0.8)*glare; a=mix(0.5,0.9,k); }
           // distance haze toward the horizon so the sea meets the sky
-          float dist=length(cameraPosition.xz-vW.xz); col=mix(col,vec3(0.72,0.86,0.95),smoothstep(700.0,2400.0,dist)*0.85*(top?1.0:0.0));
+          float dist=length(cameraPosition.xz-vW.xz); col=mix(col,uHazeC,smoothstep(700.0,2400.0,dist)*0.85*(top?1.0:0.0)); col*=mix(vec3(0.07,0.10,0.2),vec3(1.0),uDay);
           gl_FragColor=vec4(col,a);
           #include <tonemapping_fragment>
           #include <colorspace_fragment>

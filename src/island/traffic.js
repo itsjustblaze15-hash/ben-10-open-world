@@ -7,7 +7,7 @@ import { CITY } from './layout.js';
 
 const COLORS = [0xc0392b, 0x2f6fb0, 0xf1c40f, 0x27ae60, 0xecf0f1, 0x34495e, 0xe67e22, 0x8e44ad, 0x16a085];
 export class Traffic {
-  constructor(game, island, max = 16) {
+  constructor(game, island, max = 30) {
     this.g = game; this.max = max; this.cars = []; this.t = 0; this.spawnT = 0; this.mode = 'normal'; this.stats = { spawned: 0, converted: 0, stops: 0, maxActive: 0 };
     const C = CITY, xs = island.city.xs, zs = island.city.zs, xw = island.city.xw, zw = island.city.zw; this.xs = xs; this.zs = zs;
     this.nodes = []; const id = (i, j) => j * xs.length + i;
@@ -61,7 +61,7 @@ export class Traffic {
   update(dt) {
     this.t += dt; const g = this.g, P = g.player, px = P.pos.x, pz = P.pos.z;
     const inCity = px > CITY.ringX[0] - 120 && px < CITY.ringX[1] + 120 && pz > CITY.ringZ[0] - 120 && pz < CITY.ringZ[1] + 120;
-    this.spawnT -= dt; if (this.spawnT <= 0) { this.spawnT = 0.6; if (inCity && this.cars.length < this.max) this.spawn(px, pz); }
+    this.spawnT -= dt; if (this.spawnT <= 0) { this.spawnT = 0.3; if (inCity && this.cars.length < this.max) this.spawn(px, pz); }
     for (const c of this.cars.slice()) {
       if (Math.hypot(c.pos.x - px, c.pos.z - pz) > 240) { this.remove(c); continue; }
       // trouble nearby: stop and become a physical prop

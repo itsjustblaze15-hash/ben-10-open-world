@@ -283,7 +283,7 @@ export class ImpactSystem {
     this.body.o.rad = P.rad ?? 0.5; this.body.o.colH = P.colH ?? 2.2; this.body.o.step = id === 'greymatter' ? 0.03 : 0.45;
     this.body.o.wallDmg = id === 'waybig' ? 0 : 1.4; this.body.o.noLagoon = id === 'ripjaws';
   }
-  hp() { const P = this.g.player, id = this.g.chars.id; if (typeof P.hp === 'number') return { hp: P.hp, max: P.cfg?.hp ?? PLAYER_HP[id] ?? 300 }; const v = this.vit[id]; return v ? { hp: v.hp, max: v.max } : { hp: 1, max: 1 }; }
+  hp() { const P = this.g.player, id = this.g.chars.id; if (typeof P.hp === 'number') return { hp: P.hp, max: P.maxHp ?? P.cfg?.hp ?? PLAYER_HP[id] ?? 300 }; const v = this.vit[id]; return v ? { hp: v.hp, max: v.max } : { hp: 1, max: 1 }; }
   /** restore the root pose the controller owns before anything else reads / copies it (switching, controllers) */
   pre() { const m = this.mod; if (m) { m.root.rotation.x = m.ex; m.root.rotation.z = m.ez; this.mod = null; } }
   begin(inp) {

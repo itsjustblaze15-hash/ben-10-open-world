@@ -43,5 +43,13 @@ export function buildIndustrial(world, B, D, T) {
   // ---- perimeter fencing along the port road + street lights
   const port = T.roads.find(r => r.id === 'port'); if (port) for (let i = 10; i < port.pts.length; i += 9) { const p = port.pts[i]; spawns.push({ kind: 'light', x: p.x - p.dz * 11, z: p.z + p.dx * 11, yaw: Math.atan2(p.dz, -p.dx) }); }
   for (let k = 0; k < 12; k++) spawns.push({ kind: 'fence', x: 470 + k * 3.1, z: -300, yaw: 0 });
+  // ---- V31: varied ground (concrete aprons, asphalt yards, gravel strips, oil stains) + props (barriers, pallets, drums, floodlights); all flat low slabs, no colliders on the patches
+  { const GR = [0x8d9096, 0x5d6066, 0x9b8f7c, 0x75797f, 0x6b5f52]; let n = 0;
+    for (let z = -640; z < -290 && n < 90; z += 36) for (let x = 140; x < 640 && n < 90; x += 44) { const cx = x + rnd() * 20, cz = z + rnd() * 14, w = 16 + rnd() * 22, d = 10 + rnd() * 14; if (reg(cx, cz) !== 'industrial' || T.DL[at(cx, cz)] < 8 || T.RM[at(cx, cz)] > 0.6) continue;
+      if (!clear(cx - w / 2, cx + w / 2, cz - d / 2, cz + d / 2, 4)) continue; const y = TR.height(cx, cz); if (Math.abs(TR.height(cx + w / 2, cz) - y) > 1.2 || Math.abs(TR.height(cx, cz + d / 2) - y) > 1.2) continue; n++;
+      D.add('slab', cx, y - 0.02, cz, 0, { sx: w, sy: 0.14, sz: d, tint: pick(GR), dist: 900, shadow: false });
+      if (rnd() < 0.5) D.add('slab', cx + (rnd() - 0.5) * w * 0.5, y + 0.1, cz + (rnd() - 0.5) * d * 0.5, rnd() * 3, { sx: 2 + rnd() * 3, sy: 0.04, sz: 1.5 + rnd() * 2, tint: 0x2a2c30, dist: 300, shadow: false });
+      if (rnd() < 0.7) spawns.push({ kind: rnd() < 0.5 ? 'barrel' : 'crate', x: cx + (rnd() - 0.5) * w * 0.7, z: cz + (rnd() - 0.5) * d * 0.7 });
+      if (rnd() < 0.3) spawns.push({ kind: 'light', x: cx + w / 2 - 1, z: cz - d / 2 + 1, yaw: 0 }); } }
   return { spawns, quayZ };
 }

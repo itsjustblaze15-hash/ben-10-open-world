@@ -59,5 +59,10 @@ export function buildSuburb(world, B, D, T) {
   { const x = -470, z = 336, y = TR.height(x, z); D.add('pumps', x, y, z, 0, { collider: [14, 5.6, 8], small: false, kind: 'gas station' }); B.add(x, y, z - 14, 16, 4.2, 9, { style: 2, color: 0xf2f2f2, fh: 4.2, kind: 'shop', name: 'GAS STATION' });
     spawns.push({ kind: 'car', x: x - 3, z: z + 1, yaw: 0, color: 0x2f6fb0 }, { kind: 'barrel', x: x + 9, z: z - 12 }); }
   { const z = 352, y = TR.height(-600, z); for (let k = 0; k < 4; k++) B.add(-640 + k * 13, y - 0.2, z - 16, 12, 5 + (k % 2) * 1.5, 11, { style: 2, color: pick(WALL), fh: 4.0, kind: 'shop' }); }
+  // ---- V31: pocket park with a second playground, picnic benches and a tree belt; extra bushes in the yards
+  { const p = POI.find(q => q.id === 'suburbPark'); if (p) { const ox = p.x + 34, oz = p.z + 10, y = TR.height(ox, oz);
+      if (T.DL[at(ox, oz)] > 8 && T.RM[at(ox, oz)] < 0.5) { D.add('swing', ox, y, oz, 1.57, { collider: [2, 2.6, 3.6], kind: 'playground' }); D.add('slide', ox + 5, TR.height(ox + 5, oz + 3), oz + 3, 2.2, { collider: [1.6, 2.4, 4.4], kind: 'playground' }); spawns.push({ kind: 'bench', x: ox - 6, z: oz + 4, yaw: 1.2 }, { kind: 'bench', x: ox + 2, z: oz - 7, yaw: 0.2 }); }
+      for (let k = 0; k < 14; k++) { const a = k / 14 * 6.283 + 0.2, r = 30 + rnd() * 10, x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r; if (T.DL[at(x, z)] < 6 || T.RM[at(x, z)] > 0.5 || reg(x, z) !== 'suburb') continue; D.add(rnd() < 0.5 ? 'broadleaf2' : 'broadleaf', x, TR.height(x, z) - 0.1, z, a, { scale: 0.9 + rnd() * 0.5, dist: 900 }); } } }
+  for (const r of placed) { if (rnd() < 0.55) { const x = r.x0 + rnd() * (r.x1 - r.x0), z = r.z0 + rnd() * (r.z1 - r.z0); if (T.RM[at(x, z)] > 0.5 || T.DL[at(x, z)] < 5) continue; D.add('bush', x, TR.height(x, z), z, rnd() * 6, { scale: 0.8 + rnd() * 0.6, dist: 300 }); } }
   return { spawns, placed };
 }

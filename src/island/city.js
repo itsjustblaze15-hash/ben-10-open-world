@@ -21,7 +21,7 @@ export function buildCity(world, B, D, T) {
     if (isKey(C.parks, ...key)) { park(block); continue; }
     if (C.plaza[0] === key[0] && C.plaza[1] === key[1]) { plaza(block); continue; }
     if (isKey(C.lots, ...key)) { parking(block); continue; }
-    const dCore = Math.hypot(cx - C.core.x, cz - C.core.z), tall = Math.max(0, 1 - dCore / 230);
+    const dCore = Math.hypot(cx - C.core.x, cz - C.core.z), tall = Math.max(0, 1 - dCore / 300);   // V31: wider skyline falloff -> more skyscraper blocks
     if (tall > 0.55) towerBlock(block, tall); else if (tall > 0.22) midBlock(block, tall); else shopBlock(block);
   }
   // ---- street furniture along every city street (both sides), skipping the intersections
@@ -56,6 +56,7 @@ export function buildCity(world, B, D, T) {
     bld(x, z, w, d, s1, 0, { y0, color: col });
     const w2 = w * (0.68 + rnd() * 0.15), d2 = d * (0.68 + rnd() * 0.15); bld(x, z, w2, d2, h - s1, 0, { y0: y0 + s1, color: col });
     if (rnd() < 0.5) bld(x, z, w2 * 0.5, d2 * 0.5, 6 + rnd() * 8, 6, { y0: y0 + h, color: 0xd6d9de });
+    if (h > 100) bld(x, z, w2 * 0.62, d2 * 0.62, 18 + rnd() * 16, 0, { y0: y0 + h - 2, color: col });   // V31: a third setback on the very tallest towers
   }
   function midBlock(b, tall) {
     const W = b.x1 - b.x0, Dd = b.z1 - b.z0, gap = 3;
@@ -99,7 +100,7 @@ export function buildCity(world, B, D, T) {
         else if (step % 8 === 1 && rnd() < 0.7) spawns.push({ kind: rnd() < 0.5 ? 'bench' : 'trash', x: vertical ? v + s * (w / 2 + 3.1) : x, z: vertical ? z : v + s * (w / 2 + 3.1), yaw: vertical ? (s < 0 ? -Math.PI / 2 : Math.PI / 2) : (s < 0 ? Math.PI : 0) });
         else if (step % 8 === 5 && rnd() < 0.5) D.add('hydrant', vertical ? v + s * (w / 2 + 0.7) : x, 0, vertical ? z : v + s * (w / 2 + 0.7), 0, { dist: 300, shadow: false });
         // parked cars along the kerb of ordinary streets (not the avenues / ring highway)
-        if (w <= 12 && step % 3 === 1 && rnd() < 0.45) spawns.push({ kind: 'car', x: vertical ? v + s * (w / 2 - 1.3) : x, z: vertical ? z : v + s * (w / 2 - 1.3), yaw: vertical ? (s < 0 ? Math.PI : 0) : (s < 0 ? -Math.PI / 2 : Math.PI / 2), color: pick([0xc0392b, 0x2f6fb0, 0xf1c40f, 0x27ae60, 0xecf0f1, 0x34495e, 0xe67e22, 0x16a085]), parked: true });
+        if (w <= 12 && step % 3 === 1 && rnd() < 0.05) spawns.push({ kind: 'car', x: vertical ? v + s * (w / 2 - 1.3) : x, z: vertical ? z : v + s * (w / 2 - 1.3), yaw: vertical ? (s < 0 ? Math.PI : 0) : (s < 0 ? -Math.PI / 2 : Math.PI / 2), color: pick([0xc0392b, 0x2f6fb0, 0xf1c40f, 0x27ae60, 0xecf0f1, 0x34495e, 0xe67e22, 0x16a085]), parked: true });
       }
     }
   }

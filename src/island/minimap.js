@@ -14,7 +14,7 @@ export class Minimap {
     this.base = this.bake();
     const wrap = document.createElement('div'); wrap.id = 'minimap'; wrap.innerHTML = '<canvas width="220" height="220"></canvas><div id="mm-region"></div>';
     (document.getElementById('hud') || document.body).appendChild(wrap); this.el = wrap; this.cv = wrap.querySelector('canvas'); this.cx = this.cv.getContext('2d'); this.regionEl = wrap.querySelector('#mm-region');
-    const big = document.createElement('div'); big.id = 'bigmap'; big.hidden = true; big.innerHTML = '<canvas></canvas><div class="bm-title">BEN 10 · OPEN WORLD</div><div class="bm-help">TAB — CLOSE MAP</div>'; document.body.appendChild(big); this.bigEl = big; this.bigCv = big.querySelector('canvas');
+    const big = document.createElement('div'); big.id = 'bigmap'; big.hidden = true; big.innerHTML = '<canvas></canvas><div class="bm-title">BEN 10 · OPEN WORLD</div><div class="bm-legend"><b data-l="zin">＋</b><b data-l="zout">－</b><b data-l="ctr">◎ CENTRE</b><span data-l="boss"><i style="background:#ff3a2a"></i>BOSS</span><span data-l="train"><i style="background:#ff9a2a;border-radius:2px"></i>TRAIN BOTS</span><span data-l="sea"><i style="background:#2ad0ff;transform:rotate(45deg)"></i>UNDERWATER</span><span data-l="other"><i style="background:#c46aff"></i>OTHER</span><span data-l="inv"><i style="background:#ff4a3a;border:2px solid #1d4a2a"></i>INVASION</span><span data-l="poi"><i style="background:#ffd23a"></i>PLACES</span></div><div class="bm-help">DRAG PAN · WHEEL / +/- ZOOM · C CENTRE · TAB CLOSE</div>'; document.body.appendChild(big); this.bigEl = big; this.bigCv = big.querySelector('canvas');
     this.region = '';
   }
   // ------------------------------------------------------------------------------------------------ bake
@@ -72,15 +72,59 @@ export class Minimap {
     const reg = this.regionAt(P.pos.x, P.pos.z); if (reg !== this.region) { this.region = reg; this.regionEl.textContent = reg; this.regionEl.classList.remove('flash'); void this.regionEl.offsetWidth; this.regionEl.classList.add('flash'); if (this.started && reg !== 'WATER' && reg !== 'OPEN SEA') g.hud.toast(reg); this.started = true; }
     if (this.big) this.drawBig();
   }
-  toggleBig(on = !this.big) { this.big = on; this.bigEl.hidden = !on; if (on) this.drawBig(true); }
+  // ------------------------------------------------------------------------------------------------ V31 full-screen world map
+  // Drag = pan, wheel / + / - = zoom, C = centre on the player, Tab / Esc = close. Same baked terrain as the minimap. Enemy markers cluster when zoomed out.
+  toggleBig(on = !this.big) {
+    this.big = on; this.bigEl.hidden = !on;
+    if (!this.bv) { this.bv = { cx: 0, cz: 0, mpp: 3.2, drag: null, layers: { boss: 1, train: 1, sea: 1, other: 1, poi: 1, inv: 1 } }; this.bindBig(); }
+    if (on) { const P = this.g.player; this.bv.cx = P.pos.x; this.bv.cz = P.pos.z; this.bv.mpp = 3.2; this.resizeBig(); document.exitPointerLock && document.exitPointerLock(); this.drawBig(true); }
+  }
+  resizeBig() { const cv = this.bigCv, w = Math.round(innerWidth * 0.94), h = Math.round(innerHeight * 0.84); if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; } }
+  bindBig() {
+    const cv = this.bigCv, v = this.bv; this.bigEl.style.pointerEvents = 'auto';
+    const clampV = () => { v.mpp = Math.max(0.6, Math.min(9, v.mpp)); v.cx = Math.max(BOUNDS.x0, Math.min(BOUNDS.x1, v.cx)); v.cz = Math.max(BOUNDS.z0, Math.min(BOUNDS.z1, v.cz)); };
+    const zoomAt = (f, mx, my) => { const wx = v.cx + (mx - cv.width / 2) * v.mpp, wz = v.cz + (my - cv.height / 2) * v.mpp; v.mpp *= f; clampV(); v.cx = wx - (mx - cv.width / 2) * v.mpp; v.cz = wz - (my - cv.height / 2) * v.mpp; clampV(); this.drawBig(); };
+    const pos = e => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) * cv.width / r.width, (e.clientY - r.top) * cv.height / r.height]; };
+    cv.addEventListener('wheel', e => { e.preventDefault(); const [mx, my] = pos(e); zoomAt(e.deltaY > 0 ? 1.18 : 1 / 1.18, mx, my); }, { passive: false });
+    cv.addEventListener('pointerdown', e => { v.drag = { x: e.clientX, y: e.clientY, cx: v.cx, cz: v.cz }; cv.setPointerCapture && cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; });
+    cv.addEventListener('pointermove', e => { if (!v.drag) return; const r = cv.getBoundingClientRect(), k = cv.width / r.width; v.cx = v.drag.cx - (e.clientX - v.drag.x) * k * v.mpp; v.cz = v.drag.cz - (e.clientY - v.drag.y) * k * v.mpp; clampV(); this.drawBig(); });
+    const up = () => { v.drag = null; cv.style.cursor = 'grab'; }; cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up); cv.style.cursor = 'grab';
+    addEventListener('keydown', e => { if (!this.big) return; if (e.code === 'Equal' || e.code === 'NumpadAdd') zoomAt(1 / 1.3, cv.width / 2, cv.height / 2); else if (e.code === 'Minus' || e.code === 'NumpadSubtract') zoomAt(1.3, cv.width / 2, cv.height / 2); else if (e.code === 'KeyC') { const P = this.g.player; v.cx = P.pos.x; v.cz = P.pos.z; this.drawBig(); } else if (e.code === 'Escape') this.toggleBig(false); });
+    this.bigEl.querySelector('.bm-legend').addEventListener('click', e => { const k = e.target.closest('[data-l]'); if (!k) return; const l = k.dataset.l; if (l === 'zin') zoomAt(1 / 1.3, cv.width / 2, cv.height / 2); else if (l === 'zout') zoomAt(1.3, cv.width / 2, cv.height / 2); else if (l === 'ctr') { const P = this.g.player; v.cx = P.pos.x; v.cz = P.pos.z; this.drawBig(); } else { v.layers[l] = v.layers[l] ? 0 : 1; k.classList.toggle('off', !v.layers[l]); this.drawBig(); } });
+  }
+  // every live / known hostile as {x,z,kind,label}
+  enemyList() {
+    const g = this.g, o = [], L = this.bv.layers;
+    if (L.boss) for (const b of g.bossList || []) { if (!b.present) continue; const p = b.home || b.pos; o.push({ x: p.x, z: p.z, kind: 'boss', label: b.isKevin ? 'K' : b.curId !== undefined ? 'A' : 'V', dead: b.dead }); }
+    if (L.train && g.trainBots) { for (const s of g.trainBots.sites) o.push({ x: s.x, z: s.z, kind: 'train', label: 'T', site: true }); for (const b of g.trainBots.list) if (!b.parked && !b.dead) o.push({ x: b.pos ? b.pos.x : b.home.x, z: b.pos ? b.pos.z : b.home.z, kind: 'train', label: 'T', live: true }); }
+    if (L.sea && g.seaBots) for (const b of g.seaBots.list) if (!b.parked && !b.dead) o.push({ x: b.pos.x, z: b.pos.z, kind: 'sea', label: '≈' });
+    if (L.other && g.enemies) for (const t of g.enemies.turrets) { const p = t.pos || (t.root && t.root.position); if (p && !t.dead) o.push({ x: p.x, z: p.z, kind: 'other', label: '!' }); }
+    if (L.inv && g.invasion) for (const m of g.invasion.markers()) o.push(m);
+    return o;
+  }
   drawBig(full = false) {
-    const cv = this.bigCv, s = Math.min(innerWidth * 0.9, innerHeight * 0.86) / Math.max(this.W, this.H); if (full || cv.width !== Math.round(this.W * s)) { cv.width = Math.round(this.W * s); cv.height = Math.round(this.H * s); }
-    const g = cv.getContext('2d'); g.drawImage(this.base, 0, 0, cv.width, cv.height);
-    g.font = 'bold 13px sans-serif'; g.textAlign = 'center'; const done = new Set();
-    const label = (name, x, z) => { if (done.has(name)) return; done.add(name); const [px, py] = this.P(x, z); g.fillStyle = 'rgba(15,20,26,.78)'; const w = g.measureText(name).width + 14; g.fillRect(px * s - w / 2, py * s - 11, w, 20); g.fillStyle = '#fff'; g.fillText(name, px * s, py * s + 4); };
-    label('MAIN CITY', -246, -110); label('OMNITRIX LABS', 0, 70); label('SUBURB', -560, 520); label('FOREST', -800, -280); label('MOUNTAINS', -300, -560); label('DESERT', 470, 230); label('BEACH', 220, 470); label('INDUSTRIAL AREA', 420, -420);
-    for (const p of POI) { const [px, py] = this.P(p.x, p.z); g.fillStyle = '#ffd23a'; g.beginPath(); g.arc(px * s, py * s, 3, 0, 7); g.fill(); }
-    const P = this.g.player, [px, py] = this.P(P.pos.x, P.pos.z); g.save(); g.translate(px * s, py * s); g.rotate(-(P.yaw ?? 0) + Math.PI); g.fillStyle = '#7dff3a'; g.strokeStyle = '#0b2a05'; g.lineWidth = 2; g.beginPath(); g.moveTo(0, -12); g.lineTo(9, 10); g.lineTo(0, 5); g.lineTo(-9, 10); g.closePath(); g.fill(); g.stroke(); g.restore();
-    for (const b of this.g.bossList || []) { if (!b.present) continue; const p = b.home || b.pos, [bx, by] = this.P(p.x, p.z); g.fillStyle = '#ff3a2a'; g.beginPath(); g.arc(bx * s, by * s, 7, 0, 7); g.fill(); g.fillStyle = '#fff'; g.fillText(b.isKevin ? 'K' : b.curId !== undefined ? 'A' : 'V', bx * s, by * s + 4); }
+    this.resizeBig(); const cv = this.bigCv, v = this.bv, g = cv.getContext('2d'), W = cv.width, H = cv.height, P = this.g.player;
+    const k = PX / v.mpp, sx = wx => (wx - v.cx) / v.mpp + W / 2, sy = wz => (wz - v.cz) / v.mpp + H / 2;
+    g.fillStyle = '#2f7fb8'; g.fillRect(0, 0, W, H);
+    g.save(); g.imageSmoothingEnabled = true; g.translate(W / 2, H / 2); g.scale(k, k); const [bx, bz] = this.P(v.cx, v.cz); g.translate(-bx, -bz); g.drawImage(this.base, 0, 0); g.restore();
+    // grid every 200 m
+    g.strokeStyle = 'rgba(255,255,255,.10)'; g.lineWidth = 1; g.beginPath(); for (let x = Math.ceil(BOUNDS.x0 / 200) * 200; x < BOUNDS.x1; x += 200) { g.moveTo(sx(x), 0); g.lineTo(sx(x), H); } for (let z = Math.ceil(BOUNDS.z0 / 200) * 200; z < BOUNDS.z1; z += 200) { g.moveTo(0, sy(z)); g.lineTo(W, sy(z)); } g.stroke();
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    const pill = (txt, x, y, font, bg, fg) => { g.font = font; const w = g.measureText(txt).width + 12; g.fillStyle = bg; g.beginPath(); g.roundRect ? g.roundRect(x - w / 2, y - 10, w, 20, 6) : g.rect(x - w / 2, y - 10, w, 20); g.fill(); g.fillStyle = fg; g.fillText(txt, x, y + 1); };
+    // region labels (always), landmark labels when zoomed in
+    const reg = [['MAIN CITY', -246, -110], ['OMNITRIX LABS', 0, 70], ['SUBURBS', -560, 520], ['FOREST', -800, -280], ['MOUNTAINS', -300, -560], ['DESERT', 470, 230], ['BEACH', 220, 470], ['INDUSTRIAL AREA', 420, -420]];
+    for (const [n, x, z] of reg) pill(n, sx(x), sy(z), 'bold 13px sans-serif', 'rgba(12,18,24,.8)', '#fff');
+    if (v.layers.poi) for (const p of POI) { const x = sx(p.x), y = sy(p.z); if (x < -20 || y < -20 || x > W + 20 || y > H + 20) continue; g.fillStyle = '#ffd23a'; g.strokeStyle = '#3a2a00'; g.lineWidth = 2; g.beginPath(); g.arc(x, y, 5, 0, 7); g.fill(); g.stroke(); if (v.mpp < 2.6) pill(p.name, x, y - 16, '600 11px sans-serif', 'rgba(40,30,0,.78)', '#ffe9a0'); }
+    // enemy markers, clustered on a screen grid
+    const list = this.enemyList(), cell = v.mpp > 4.2 ? 46 : v.mpp > 2.2 ? 28 : 0, col = { boss: '#ff3a2a', train: '#ff9a2a', sea: '#2ad0ff', other: '#c46aff', drone: '#ff5a4a', robot: '#d8402f', heavy: '#a8201f', giant: '#7a0f14', loc: '#ffb020' };
+    const draw1 = (e, x, y) => { const pulse = e.kind === 'boss' ? 0.8 + 0.2 * Math.sin(this.t * 6) : 1; g.globalAlpha = e.site && !e.live ? 0.55 : pulse; g.fillStyle = e.dead ? '#888' : col[e.kind]; g.strokeStyle = '#150a0a'; g.lineWidth = 2; g.beginPath(); if (e.kind === 'train') g.rect(x - 6, y - 6, 12, 12); else if (e.kind === 'sea') { g.moveTo(x, y - 8); g.lineTo(x + 7, y); g.lineTo(x, y + 8); g.lineTo(x - 7, y); g.closePath(); } else g.arc(x, y, e.kind === 'boss' ? 9 : e.kind === 'giant' ? 9 : e.kind === 'heavy' ? 7.5 : e.kind === 'drone' ? 4.5 : 6, 0, 7); g.fill(); g.stroke(); g.globalAlpha = 1; g.fillStyle = '#fff'; g.font = 'bold 10px sans-serif'; g.fillText(e.label, x, y + 1); };
+    if (!cell) for (const e of list) draw1(e, sx(e.x), sy(e.z));
+    else { const cl = new Map(); for (const e of list) { const x = sx(e.x), y = sy(e.z), key = e.kind + ':' + Math.floor(x / cell) + ',' + Math.floor(y / cell); let c = cl.get(key); if (!c) cl.set(key, c = { n: 0, x: 0, y: 0, e }); c.n++; c.x += x; c.y += y; } for (const c of cl.values()) { const x = c.x / c.n, y = c.y / c.n; if (c.n === 1) draw1(c.e, x, y); else { g.fillStyle = col[c.e.kind]; g.strokeStyle = '#150a0a'; g.lineWidth = 2; g.beginPath(); g.arc(x, y, 11, 0, 7); g.fill(); g.stroke(); g.fillStyle = '#fff'; g.font = 'bold 12px sans-serif'; g.fillText(String(c.n), x, y + 1); } } }
+    // the ship (if it is flying) and the player
+    const sh = this.g.mothership; if (sh && sh.loaded && sh.pos) { const x = sx(sh.pos.x), y = sy(sh.pos.z); if (x > -40 && y > -40 && x < W + 40 && y < H + 40) { g.fillStyle = 'rgba(190,200,255,.9)'; g.strokeStyle = '#223'; g.lineWidth = 2; g.beginPath(); g.ellipse(x, y, 14, 6, 0, 0, 7); g.fill(); g.stroke(); } }
+    const px = sx(P.pos.x), py = sy(P.pos.z); g.save(); g.translate(px, py); g.rotate(-(P.yaw ?? 0) + Math.PI); g.fillStyle = '#7dff3a'; g.strokeStyle = '#0b2a05'; g.lineWidth = 2.5; g.beginPath(); g.moveTo(0, -13); g.lineTo(10, 11); g.lineTo(0, 5); g.lineTo(-10, 11); g.closePath(); g.fill(); g.stroke(); g.restore();
+    // north arrow + scale bar
+    g.fillStyle = 'rgba(12,18,24,.8)'; g.beginPath(); g.arc(W - 34, 34, 18, 0, 7); g.fill(); g.fillStyle = '#fff'; g.font = 'bold 13px sans-serif'; g.fillText('N', W - 34, 35); g.strokeStyle = '#fff'; g.beginPath(); g.moveTo(W - 34, 14); g.lineTo(W - 34, 20); g.stroke();
+    const bar = v.mpp > 3 ? 500 : v.mpp > 1.5 ? 200 : 100, bw = bar / v.mpp; g.fillStyle = 'rgba(12,18,24,.8)'; g.fillRect(14, H - 38, bw + 20, 26); g.fillStyle = '#fff'; g.fillRect(24, H - 22, bw, 3); g.font = '11px sans-serif'; g.textAlign = 'left'; g.fillText(bar + ' m', 24, H - 29); g.textAlign = 'center';
   }
 }

@@ -27,7 +27,7 @@ export class Decor {
       const anyTint = L.list.some(it => it.tint !== undefined); if (anyTint) L.list.forEach((it, i) => im.setColorAt(i, _col.set(it.tint ?? 0xffffff)));
       L.list.forEach((it, i) => { _p.set(it.x, it.y, it.z); _q.setFromEuler(_e.set(0, it.yaw, 0)); _s.set(it.sx, it.sy, it.sz); im.setMatrixAt(i, _m.compose(_p, _q, _s)); cx += it.x; cz += it.z; });
       cx /= L.list.length; cz /= L.list.length; for (const it of L.list) r = Math.max(r, Math.hypot(it.x - cx, it.z - cz));
-      im.computeBoundingSphere(); im.castShadow = L.shadow; im.receiveShadow = false; im.userData = { cx, cz, r, dist: L.dist }; this.group.add(im); this.meshes.push(im);
+      L.im = im; im.computeBoundingSphere(); im.castShadow = L.shadow; im.receiveShadow = false; im.userData = { cx, cz, r, dist: L.dist }; this.group.add(im); this.meshes.push(im);
     }
   }
   update(cam) { for (const m of this.meshes) { const u = m.userData; m.visible = Math.hypot(cam.x - u.cx, cam.z - u.cz) - u.r < u.dist; } }

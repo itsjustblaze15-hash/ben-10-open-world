@@ -56,6 +56,13 @@ export function buildNature(world, B, D, T) {
   }
   // ---- the mountain stream + the waterfall into the forest lake
   buildStream(world, TR);
+  // ---- V31: scenic viewpoints on the winding mountain road (stone lookout deck, railing, bench, lamp); only where the ground beside the road is gentle
+  { const mt = T.roads.find(r => r.id === 'mtn'); if (mt) { let made = 0; for (let f = 0.14; f < 0.95 && made < 5; f += 0.13) { const i = Math.floor(f * (mt.pts.length - 1)), p = mt.pts[i]; if (!p) continue;
+      for (const sd of [1, -1]) { const nx = -p.dz * sd, nz = p.dx * sd, off = mt.w / 2 + 8, cx = p.x + nx * off, cz = p.z + nz * off; if (T.DL[at(cx, cz)] < 6 || T.RM[at(cx, cz)] > 0.2) continue;
+        let lo = 1e9, hi = -1e9; for (const [dx, dz] of [[-5, -5], [5, -5], [-5, 5], [5, 5], [0, 0]]) { const y = TR.height(cx + dx, cz + dz); lo = Math.min(lo, y); hi = Math.max(hi, y); } if (hi - lo > 2.2 || lo < 2) continue;
+        D.add('slab', cx, lo - 0.6, cz, 0, { sx: 11, sy: hi - lo + 0.9, sz: 11, tint: 0x8d8a84, dist: 1200 }); const top = hi + 0.3;
+        for (let k = -2; k <= 2; k++) spawns.push({ kind: 'fence', x: cx + nx * 5.2 * 0 + (-nz) * k * 2.6 + nx * 4.6, z: cz + nz * 0 + nx * k * 2.6 + nz * 4.6, yaw: Math.atan2(nx, nz) + Math.PI / 2, y: top });
+        spawns.push({ kind: 'bench', x: cx - nx * 2, z: cz - nz * 2, yaw: Math.atan2(nx, nz), y: top }); made++; break; } } } }
   return { spawns };
 }
 

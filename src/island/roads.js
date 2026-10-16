@@ -54,7 +54,7 @@ function ribbon(T, R, half, terrain) {
   for (let i = 0; i < n; i++) {
     const p = P[i]; if (i) along += Math.hypot(p.x - P[i - 1].x, p.z - P[i - 1].z);
     const lx = -p.dz, lz = p.dx; for (let s = 0; s < 2; s++) {
-      const sg = s ? -1 : 1, x = p.x + lx * half * sg, z = p.z + lz * half * sg; let y = p.deck ? DECK : Math.max(p.y, terrain.height(x, z) - 0.02);
+      const sg = s ? -1 : 1, x = p.x + lx * half * sg, z = p.z + lz * half * sg; const th = terrain.height(x, z); let y = p.deck ? DECK : Math.min(Math.max(p.y, th - 0.02), th + 0.12);   // V30: hug the ground (no floating / buried ribbons)
       if (!p.deck && terrain.height(x, z) < SEA) y = Math.max(p.y, SEA + 0.05);
       const v = i * 2 + s; pos[v * 3] = x; pos[v * 3 + 1] = y + (p.deck ? 0.03 : 0.07); pos[v * 3 + 2] = z; uv[v * 2] = s ? 0 : 1; uv[v * 2 + 1] = along;
     }
