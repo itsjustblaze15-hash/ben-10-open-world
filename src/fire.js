@@ -23,12 +23,12 @@ export const FLAM = {
 
 class LightPool {
   constructor(scene, n = 5) {
-    this.items = []; for (let i = 0; i < n; i++) { const l = new THREE.PointLight(0xff7a2a, 0, 14, 1.6); l.castShadow = false; scene.add(l); this.items.push({ l, life: 0, max: 1, base: 0, hold: 0 }); }
+    this.boost = 1; this.items = []; for (let i = 0; i < n; i++) { const l = new THREE.PointLight(0xff7a2a, 0, 14, 1.6); l.castShadow = false; scene.add(l); this.items.push({ l, life: 0, max: 1, base: 0, hold: 0 }); }
   }
   /** transient flash: takes a free slot, else the dimmest transient (slot 0 is reserved for the player's own light) */
   flash(pos, color, intensity, life, dist = 16) {
     let best = null; for (let i = 3; i < this.items.length; i++) { const it = this.items[i]; if (it.life <= 0) { best = it; break; } if (!best || it.base * it.life / it.max < best.base * best.life / best.max) best = it; }
-    best.l.position.copy(pos); best.l.color.setRGB(color[0], color[1], color[2]); best.l.distance = dist; best.base = intensity; best.life = best.max = life;
+    best.l.position.copy(pos); best.l.color.setRGB(color[0], color[1], color[2]); best.l.distance = dist; best.base = intensity * this.boost; best.life = best.max = life;
   }
   update(dt) { for (let i = 3; i < this.items.length; i++) { const it = this.items[i]; if (it.life > 0) { it.life -= dt; const k = Math.max(0, it.life / it.max); it.l.intensity = it.base * k * k; } else it.l.intensity = 0; } }
 }
@@ -46,7 +46,7 @@ export class FireSystem {
     this.sn = 0;
   }
   // ---------------------------------------------------------------------------------------------- particles
-  flame(pos, vel, size = 0.5, life = 0.5, heat = 1, grow = -0.4) { this.g.fx.fire.emit({ pos, vel, size, life, drag: 1.4, grav: -2.5, grow: grow * size, color: pick(heat), alpha: 0.95 }); }
+  flame(pos, vel, size = 0.5, life = 0.5, heat = 1, grow = -0.4) { size *= 1.22; life *= 1.1; this.g.fx.fire.emit({ pos, vel, size, life, drag: 1.4, grav: -2.5, grow: grow * size, color: pick(heat), alpha: 0.95 }); }
   smoke(pos, vel, size = 1, life = 1.6) { this.g.fx.smoke.emit({ pos, vel, size, life, drag: 0.9, grav: -0.8, grow: 0.9 * size, color: SMK, alpha: 0.75 }); }
   spark(pos, vel, life = 0.6) { this.g.fx.fire.emit({ pos, vel, size: rand(0.08, 0.16), life, drag: 0.4, grav: 7, color: HOT, alpha: 1 }); }
   burst(pos, n, speed, size, life, up = 0.5) { for (let i = 0; i < n; i++) { _v.set(rand(-1, 1), rand(-0.2, 1) + up, rand(-1, 1)).normalize().multiplyScalar(rand(0.3, 1) * speed); this.flame(pos, _v, size * rand(0.6, 1.2), life * rand(0.6, 1.1), 1.2); } }
@@ -87,9 +87,10 @@ export class FireSystem {
   // ---------------------------------------------------------------------------------------------- explosions
   /** area damage + shove + ignition + visuals. opts: owner (player, for stats), noRing, fuel, big, ignite (extra heat) */
   explode(c, R, dmg, kb, o = {}) {
+    R *= 1.12; dmg *= 1.2; kb *= 1.2;                     // V30: stronger explosions
     const g = this.g, fx = g.fx; this.stats.explosions++; if (g.world.danger) g.world.danger(c.x, c.z, Math.max(30, R * 4), 2);
     for (const h of g.world.hittables) {
-      if (h.dead || (o.owner && h === o.owner)) continue; const hp = h.root.position, dx = hp.x - c.x, dz = hp.z - c.z, dy = hp.y + 1.2 - c.y, d = Math.hypot(dx, dz, dy * 0.6); if (d > R) continue;
+      if (h.dead || (o.owner && h === o.owner) || (o.skip && o.skip(h))) continue; const hp = h.root.position, dx = hp.x - c.x, dz = hp.z - c.z, dy = hp.y + 1.2 - c.y, d = Math.hypot(dx, dz, dy * 0.6); if (d > R) continue;
       const f = 1 - d / R, dd = dmg * (0.35 + 0.65 * f) * (o.dmgMul || 1), dir = _w.set(dx, 0, dz); if (dir.lengthSq() < 1e-4) dir.set(rand(-1, 1), 0, rand(-1, 1)); dir.normalize();
       const pt = new THREE.Vector3(hp.x, hp.y + 1.3, hp.z); h.applyHit(pt, dir.clone(), dd); if (h.shove) h.shove(dir, kb * (0.4 + 0.6 * f) * (o.kbMul || 1)); if (h.launch) h.launch(2.5 + 5 * f);
       g.hud.hit(pt, Math.round(dd), h); if (h instanceof Dummy) this.igniteDummy(h, 2.5 + 3 * f);
@@ -148,7 +149,7 @@ export class FireSystem {
       const n = (10 + 16 * sz) * dt * lod * (1 - 0.6 * clamp((b.t - b.dur * 0.7) / (b.dur * 0.3), 0, 1)) + Math.random();
       for (let j = 0; j < Math.floor(n); j++) { _v.set(p.pos.x + rand(-1, 1) * p.half.x, p.pos.y + rand(0.2, 1) * p.size.h, p.pos.z + rand(-1, 1) * p.half.z); this.flame(_v, _w.set(rand(-0.4, 0.4), rand(1.5, 3.6), rand(-0.4, 0.4)), rand(0.5, 1.0) * (0.6 + sz * 0.4), rand(0.4, 0.8), 1); }
       if (Math.random() < (4 + 3 * sz) * dt * lod) this.smoke(_v.set(p.pos.x + rand(-1, 1) * p.half.x, p.pos.y + p.size.h + 0.3, p.pos.z + rand(-1, 1) * p.half.z), _w.set(rand(-0.3, 0.3), rand(1.6, 2.6), rand(-0.3, 0.3)), rand(1, 1.8) * (0.7 + sz * 0.3), rand(1.6, 2.6));
-      if (lit < 2 && far < 40) { const it = this.lights.items[1 + lit++]; it.l.position.set(cen.x, cen.y + 0.8, cen.z); it.l.color.setRGB(1, 0.55 + 0.1 * Math.sin(this.t * 17 + p.pos.x), 0.2); it.l.intensity = (7 + 5 * sz) * (0.85 + 0.15 * Math.sin(this.t * 23)) * (1 - 0.7 * clamp((b.t - b.dur * 0.8) / (b.dur * 0.2), 0, 1)); it.l.distance = 9 + 3 * sz; }
+      if (lit < 2 && far < 40) { const it = this.lights.items[1 + lit++]; it.l.position.set(cen.x, cen.y + 0.8, cen.z); it.l.color.setRGB(1, 0.55 + 0.1 * Math.sin(this.t * 17 + p.pos.x), 0.2); it.l.intensity = this.lights.boost * (7 + 5 * sz) * (0.85 + 0.15 * Math.sin(this.t * 23)) * (1 - 0.7 * clamp((b.t - b.dur * 0.8) / (b.dur * 0.2), 0, 1)); it.l.distance = 9 + 3 * sz; }
       if (F.explode) { if (b.t > F.dur) { this.burners.delete(p); p.burn = null; const c = p.center.clone(); g.props.destroy(p, null); this.explode(c, 6.5, 55, 13, { big: true, fuel: true }); continue; } }
       else if (F.vehicle) { p.hp -= p.hpMax * 0.035 * dt; if (p.hp <= 0 || b.t > b.dur + 2) { this.burners.delete(p); p.burn = null; this.carBlast(p); continue; } if (b.t > b.dur * 0.55 && Math.random() < 3 * dt) this.spark(cen, _w.set(rand(-1, 1), rand(2, 5), rand(-1, 1)).clone(), 0.9); }
       else { g.props.hurt(p, p.hpMax * F.dps * dt); if (p.dead) { this.burners.delete(p); p.burn = null; this.burst(cen, 10, 4, 0.8, 0.5); this.groundFire(p.pos.x, p.pos.z, Math.max(p.half.x, p.half.z) * 0.9 + 0.4, 3.2, p.pos.y, 5); continue; } }

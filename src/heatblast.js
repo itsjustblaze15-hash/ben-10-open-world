@@ -1,6 +1,7 @@
 // Heatblast controller: ground locomotion (idle / walk / sprint / jump / double jump / landing), a full flight system (take-off, hover, 6-way flight, boost, soft landing),
 // procedural animation on the supplied GLB's real skeleton, flame effects that follow the body and a dynamic fire light. Powers live in hb_powers.js.
 // Runs on PLAYER time (real seconds); everything it hits reacts on WORLD time inside the target's own update.
+import { HbRock } from './hb_rock.js';
 import * as THREE from 'three';
 import { FaPoser } from '../animations/fourarmsrig.js';
 import { clamp, damp, lerp, angleDelta, rand, smoothstep } from './util.js';
@@ -32,6 +33,7 @@ export class HbPlayer {
     this.fxT = { run: 0, trail: 0, head: 0, body: 0, hand: 0 };
     this.initPowers(game);
     this.root.rotation.y = this.yaw; this.root.visible = false;
+    this.bodyMats = [rig.mats.get('rock_heat')].filter(m => m && m.isMeshStandardMaterial);   // (an unlit MeshBasic body is already full-bright at night, nothing to add) this.bodyMats.forEach(m => { if (m.map && !m.userData.glowSet) { m.userData.glowSet = 1; m.emissive = new THREE.Color(1.0, 0.42, 0.1); m.emissiveMap = m.map; m.emissiveIntensity = 0; m.needsUpdate = true; } });   // V31: the model's own texture drives the night glow (hot cracks glow, dark rock does not)
     this.fireMats = [rig.mats.get('fire'), rig.mats.get('fire01')].filter(Boolean); this.fireMats.forEach(m => { m.userData.c0 = m.color.clone(); });
     this.poser.apply(this.locoPose(0.016));
   }
@@ -195,8 +197,11 @@ export class HbPlayer {
     const L = F.lights.items[0].l; this.light = L; const flick = 0.85 + 0.15 * Math.sin(A.t * 19) * Math.sin(A.t * 7.3) + 0.08 * Math.random();
     const act = this.act, big = act ? (act.kind === 'burst' ? 3.5 : act.kind === 'blast' || act.kind === 'fireball' || act.kind === 'punch' || act.kind === 'wave' ? 1.6 : 1) : 1;
     A.heat = damp(A.heat, (4.5 + 2.5 * (this.flying ? 1 : 0) + 2.2 * Math.min(1, sp / 10) + 22 * prot) * big, 7, dt);
-    L.position.set(this.pos.x, this.pos.y + 1.4, this.pos.z); L.intensity = A.heat * flick; L.color.setRGB(1, 0.5 + 0.12 * prot + 0.08 * flick, 0.18 + 0.2 * prot); L.distance = 11 + 6 * prot + (act && act.kind === 'burst' ? 14 : 0);
-    this.setFireTint(1 + 0.12 * Math.sin(A.t * 3.1) + 0.12 * prot + 0.4 * (act && act.kind === 'burst' ? 1 : 0) + 0.07 * Math.sin(A.t * 11));
+    // V31 NIGHT GLOW: his flames light him and his surroundings (brighter body light, glowing rock-cracks, hands lit while attacking); by day it stays as before
+    const nk = g.dayNight ? g.dayNight.night : 0; F.lights.boost = 1 + 1.3 * nk; A.nightK = damp(A.nightK || 0, nk, 3, dt); const NK = A.nightK;
+    if (this.bodyMats) for (const m of this.bodyMats) { m.emissiveIntensity = NK * (0.75 + 0.25 * Math.sin(A.t * 4.1)) * (this.act ? 1.5 : 1); }
+    L.position.set(this.pos.x, this.pos.y + 1.4, this.pos.z); L.intensity = A.heat * flick * (1 + 1.6 * NK) * (this.act && NK > 0.1 ? 1.25 : 1); L.color.setRGB(1, 0.5 + 0.12 * prot + 0.08 * flick, 0.18 + 0.2 * prot); L.distance = 11 + 6 * prot + 6 * NK + (act && act.kind === 'burst' ? 14 : 0);
+    this.setFireTint(1 + 0.18 * NK + 0.12 * Math.sin(A.t * 3.1) + 0.12 * prot + 0.4 * (act && act.kind === 'burst' ? 1 : 0) + 0.07 * Math.sin(A.t * 11));
   }
   /** brighten / pulse the model's yellow flame materials (runtime tint on the unlit material colour; the asset itself is untouched) */
   setFireTint(k) { for (const m of this.fireMats) { m.color.copy(m.userData.c0).multiplyScalar(k); } }
@@ -253,7 +258,7 @@ export class HbPlayer {
   flyOverlay(P, W, dt) {
     const A = this.an, F = this.cfg.fly, fx = Math.sin(this.yaw), fz = Math.cos(this.yaw), vf = this.vel.x * fx + this.vel.z * fz, vl = this.vel.x * fz - this.vel.z * fx;
     const spF = clamp(vf / F.cruise, -1, 1), spB = clamp(vf / F.boost, -1, 1), boost = this.flyBoost, up = clamp(this.vel.y / 12, -1, 1);
-    const tl = clamp(spF * 0.42 + (vf > F.cruise ? (vf - F.cruise) / (F.boost - F.cruise) * 0.8 : 0) + (this.mode === 'fly' ? 0 : 0.08), -0.5, 1.28), tr = clamp(-vl / F.cruise * 0.55, -0.7, 0.7);
+    const tl = clamp(spF * 0.42 + (vf > F.cruise ? (vf - F.cruise) / (F.boost - F.cruise) * 0.8 : 0) + (this.mode === 'fly' ? 0 : 0.08), -0.3, 0.42), tr = clamp(-vl / F.cruise * 0.55, -0.7, 0.7);
     A.lean = damp(A.lean, tl, 5, dt); A.roll = damp(A.roll, tr, 5, dt); A.boost = damp(A.boost, boost, 6, dt);
     const Q = mkPose(), lean = A.lean, roll = A.roll, t = A.t, hov = 1 - clamp(Math.abs(lean) / 0.5, 0, 1), fast = clamp((lean - 0.4) / 0.8, 0, 1);
     Q.d.hips = D(lean + 0.03 * Math.sin(t * 2.1) * hov - 0.12 * up * (1 - fast), 0, roll); Q.d.spine = D(-0.12 * lean + 0.03 * Math.sin(t * 2.1 + 1) * hov, 0, -roll * 0.3); Q.d.chest = D(-0.12 * lean, 0, -roll * 0.2);
@@ -266,6 +271,7 @@ export class HbPlayer {
     }
     Q.off = [0, 0.02 * Math.sin(t * 2.1) * hov - 0.08 * Math.abs(roll), 0.05 * lean]; Q.w = W; layer(P, Q, this.poser);
   }
+  rockUpdate(dt) { if (!this.rock) this.rock = new HbRock(this.g); this.rock.update(dt, this); }
   footstep(side) {
     const g = this.g, A = this.an; g.camera.addTrauma(0.01 + 0.02 * A.rn); g.sfx.thud(0.05 + 0.1 * A.rn);
     if (A.rn > 0.4) { const fp = this.boneWorld(side > 0 ? this.rig.bones.ankleL : this.rig.bones.ankleR, _a); for (let i = 0; i < 2; i++) g.fire.flame(_c.set(fp.x, this.pos.y + 0.1, fp.z), _b.set(rand(-1, 1), rand(0.5, 1.5), rand(-1, 1)), 0.3, 0.3, 1); }
@@ -273,7 +279,7 @@ export class HbPlayer {
   /** per-frame: locomotion + action layer -> skeleton */
   updateAnim(dt) {
     const A = this.an, P = this.locoPose(dt); const L = this.actLayer(dt); if (L) layer(P, L, this.poser);
-    this.poser.apply(P); this.root.updateMatrixWorld(true); this.updateFX(dt); this.updateState();
+    this.poser.apply(P); this.root.updateMatrixWorld(true); this.updateFX(dt); this.rockUpdate(dt); this.updateState();
   }
   updateState() {
     const A = this.an;

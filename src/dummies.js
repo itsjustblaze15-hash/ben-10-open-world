@@ -83,7 +83,7 @@ export class Dummy extends Hittable {
         this.thrown = 0; const sp = this.kv.length(); this.kv.multiplyScalar(0.15);
         if (!this.dead) { this.applyHit(this.root.position.clone().setY(this.root.position.y + 1.3), new THREE.Vector3(this.kv.x, 0, this.kv.z).normalize(), 12); if (this.onImpact) this.onImpact(this, sp); }
       }
-      this.home.x = clamp(this.home.x, -33, 33); this.home.z = clamp(this.home.z, -33, 33);
+      if (!this.world.island) { this.home.x = clamp(this.home.x, -33, 33); this.home.z = clamp(this.home.z, -33, 33); }       // V30: the arena is walled, the island is not
       if (this.dead) this.root.position.set(this.home.x + this.slide.x, this.root.position.y, this.home.z + this.slide.z);
     }
     if (!this.dead) {
@@ -102,6 +102,7 @@ export class Dummy extends Hittable {
       this.root.position.set(this.home.x + this.slide.x, this.home.y, this.home.z + this.slide.z);
     }
     if (this.air > 0 || this.airV > 0) { this.airV -= 26 * dt; this.air += this.airV * dt; if (this.air <= 0) { this.air = 0; this.airV = 0; if (!this.held) this.thrown = 0; this.tiltV.multiplyScalar(0.3); } }
+    if (this.world.island && this.world.groundAt && this.air <= 0.001 && !this.held) { const gy = this.world.groundAt(this.home.x, this.home.z, this.home.y + 2.2, 0.5, 0.3); if (Number.isFinite(gy)) this.home.y += (gy - this.home.y) * Math.min(1, dt * 14); }       // V30: stand on the island ground
     this.root.position.y = this.home.y + this.air;
     this.hitFlash = Math.max(0, this.hitFlash - dt);
     for (const m of this.mats) { m.emissive = m.emissive || new THREE.Color(); }
@@ -111,7 +112,7 @@ export class Dummy extends Hittable {
     if (this.dead) { this.deadT += dt; this.respawnT -= dt; if (this.respawnT <= 0) this.respawn(); }
   }
   /** shove the dummy away (it stays where it lands) */
-  knock(dir, force) { this.home.x = clamp(this.home.x + dir.x * force * 0.4, -33, 33); this.home.z = clamp(this.home.z + dir.z * force * 0.4, -33, 33); this.slideV.x += dir.x * force * 0.5; this.slideV.z += dir.z * force * 0.5; }
+  knock(dir, force) { const L = this.world.island ? 1e5 : 33; this.home.x = clamp(this.home.x + dir.x * force * 0.4, -L, L); this.home.z = clamp(this.home.z + dir.z * force * 0.4, -L, L); this.slideV.x += dir.x * force * 0.5; this.slideV.z += dir.z * force * 0.5; }
   /** add a real momentum impulse (m/s) - accumulates and is integrated on world time */
   shove(dir, speed) { this.kv.x += dir.x * speed; this.kv.z += dir.z * speed; const m = this.kv.length(); if (m > 42) this.kv.multiplyScalar(42 / m); }
   /** throw the dummy into the air */

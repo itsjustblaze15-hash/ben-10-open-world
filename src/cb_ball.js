@@ -13,7 +13,8 @@ import { clamp, damp, lerp, rand, smoothstep } from './util.js';
 const V3 = THREE.Vector3, Q4 = THREE.Quaternion, UP = new V3(0, 1, 0);
 const _a = new V3(), _b = new V3(), _c = new V3(), _d = new V3(), _q = new Q4();
 export const BALL = { R: BALL_R, mass: 220, g: 26, top: 19.5, topBoost: 31.5, acc: 16.5, accBoost: 23, accAir: 3.2, coast: 2.0, brake: 30, jump: 9.6, maxSpeed: 40, bounceMin: 3.4 };
-const E0 = { ground: 0.42, concrete: 0.5, wood: 0.3, metal: 0.36, ramp: 0.3 }, MU = { ground: 0.35, concrete: 0.3, wood: 0.5, metal: 0.28, ramp: 0.4 };
+const E0 = { ground: 0.58, concrete: 0.7, wood: 0.46, metal: 0.55, ramp: 0.45 }       // V30: livelier bounce (was 0.42 / 0.5 / 0.3 / 0.36 / 0.3)
+const MU = { ground: 0.35, concrete: 0.3, wood: 0.5, metal: 0.28, ramp: 0.4 };   // V31 FIX: this declaration had been swallowed by the comment above -> ReferenceError on every bounce -> the frame loop threw before render = the game 'froze'
 
 const surfOf = (p) => /crate|wood|bench|fence/.test(p.name || p.kind || '') ? 'wood' : /car|truck|dumpster|barrel|trash|light|robot/.test(p.kind || '') ? 'metal' : 'concrete';
 
@@ -68,6 +69,8 @@ export const cbBall = {
     }
     if (touchedGround) this.groundT = 0;
     { const T = w.island && w.terrain, f = T ? T.height(c.x, c.z) : 0; if (c.y < f - 4) { c.y = f + BALL.R + 0.1; v.set(0, 0, 0); } }                                           // safety net: never fall out of the world
+    if (!(isFinite(v.x + v.y + v.z + c.x + c.y + c.z))) { const T0 = w.island && w.terrain; v.set(0, 0, 0); if (!isFinite(c.x + c.y + c.z)) c.set(this.pos.x, (T0 ? T0.height(this.pos.x, this.pos.z) : 0) + BALL.R + 0.3, this.pos.z); }   // V31: never let NaN / Infinity poison the sim
+    if (v.y < -60) v.y = -60;
     const sp = v.length(); if (sp > BALL.maxSpeed) v.multiplyScalar(BALL.maxSpeed / sp);
     this.bs.topSpeed = Math.max(this.bs.topSpeed, sp); this.bs.rolled += sp * dt;
     this.grounded = this.groundT < 0.05; this.airPeak = this.grounded ? 0 : Math.max(this.airPeak, c.y - R); this.bs.maxAir = Math.max(this.bs.maxAir, this.airPeak);

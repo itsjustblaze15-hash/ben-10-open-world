@@ -225,6 +225,7 @@ export class Albedo extends Dummy {
   // ============================================================================================================================ main update
   update(dt) {
     if (!this.present || dt <= 1e-6) return;
+    if (this.held && !this.dead) { this.root.updateMatrixWorld(true); this.pend && (this.pend.n = 0); return; }       // V30: carried by Way Big - the hand drives it
     const g = this.g, cfg = this.cfg; this.t += dt; this.hitFlash = Math.max(0, this.hitFlash - dt);
     // background form building
     if (this.buildQueue.length && !this.dead) { this.buildT -= dt; if (this.buildT <= 0) { this.buildT = 0.35; const id = this.buildQueue.shift(); if (!this.forms[id]) { try { this.ensure(id); } catch (e) { console.warn('albedo build', id, e); } } } }

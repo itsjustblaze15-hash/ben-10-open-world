@@ -11,6 +11,7 @@ import { squat2 } from './heatblast.js';
 import { FLAM } from './fire.js';
 
 const $ = id => document.getElementById(id);
+export const HB_POWER = 1.3;
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3(), _e = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0);
 export const HB_CD = { lmb: 0.2, q: 2.2, e: 1.1, f: 6.5, g: 9, r: 14 };
 const SHOT_CAP = 28;
@@ -49,6 +50,7 @@ export const hbPowers = {
   groundY(x, z, y) { return this.g.world.groundAt(x, z, y + 1, 80, 0.3); },
   chestLocal(out) { return this.root.worldToLocal(out.setFromMatrixPosition(this.rig.bones.chest.matrixWorld)); },
   hurtFoe(h, pt, dir, dmg, kb, o = {}) {
+    dmg *= HB_POWER; kb = kb && kb * 1.3; if (o.launch) o.launch *= 1.2;          // V30: stronger fire attacks (moderate: +30 % damage, +30 % knockback)
     const g = this.g; h.applyHit(pt, dir.clone(), dmg); if (h.shove && kb) h.shove(dir, kb); if (o.launch && h.launch) h.launch(o.launch); g.hud.hit(pt, Math.round(dmg), h);
     if (o.ignite) g.fire.igniteDummy(h, o.ignite); this.stats.hits++;
   },
@@ -132,7 +134,7 @@ export const hbPowers = {
   // ============================================================================================== E: flame punch combo
   startPunch(idx) {
     if (idx === 0 && (this.cd.e > 0 || !this.canStart())) return; if (idx > 0 && this.act && this.act.kind !== 'punch') return;
-    const fin = idx === 2, a = this.beginAct('punch', { speedMul: 0.5, flySpeedMul: 0.6, noJump: true, noBoost: true }); a.idx = idx; a.fin = fin; a.windT = fin ? 0.3 : 0.16; a.strikeT = fin ? 0.17 : 0.12; a.recT = fin ? 0.5 : 0.3; a.queued = false; a.hit = new Set(); a.hands = fin ? ['UL', 'UR'] : [idx ? 'UL' : 'UR'];
+    const fin = idx === 2, a = this.beginAct('punch', { speedMul: 0.5, flySpeedMul: 0.6, noJump: true, noBoost: true }); a.idx = idx; a.fin = fin; a.windT = fin ? 0.3 : 0.16; a.strikeT = fin ? 0.17 : 0.12; a.recT = fin ? 0.5 : 0.3; a.queued = false; a.hit = new Set(); this.punchSide = this.punchSide === 'UL' ? 'UR' : 'UL'; a.side = this.punchSide; a.hands = [a.side];      // V30: left, right, left, right ... (the sequence carries across pauses)
     const f = this.foes(5.5, 0.35)[0]; if (f) a.faceYaw = Math.atan2(f.h.root.position.x - this.pos.x, f.h.root.position.z - this.pos.z); else a.faceYaw = this.aimYaw();
     if (idx > 0) a.t = 0.06; a.faceK = 24; this.punchCombo = idx; this.g.sfx.flame(0.35); this.stats.punches++;
   },
@@ -390,7 +392,7 @@ export const hbPowers = {
     return L;
   },
   punchLayer(a) {
-    const L = mkPose(); L.w = clamp(a.t / 0.06, 0, 1); const side = a.fin ? 0 : (a.idx ? 1 : -1);        // -1: right hand punches (torso winds to the right), +1: left
+    const L = mkPose(); L.w = clamp(a.t / 0.06, 0, 1); const side = a.side === 'UL' ? 1 : -1;        // -1: right hand punches (torso winds to the right), +1: left
     let wind = 0, strike = 0;
     if (a.stage === 'start') wind = smooth(a.st / a.windT); else if (a.stage === 'strike') { wind = 1 - smooth(a.st / (a.strikeT * 0.6)); strike = smooth(a.st / (a.strikeT * 0.9)); } else { strike = 1 - smooth(a.st / a.recT); }
     for (const k of ['UL', 'UR']) {

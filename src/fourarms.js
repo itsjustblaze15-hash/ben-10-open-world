@@ -6,8 +6,11 @@ import { FaPoser, FA_SCALE } from '../animations/fourarmsrig.js';
 import { clamp, damp, lerp, angleDelta, rand, smoothstep } from './util.js';
 import { ARMS, SIDE, V, hand, mkPose, arm, smooth, K, D, squat, layer } from './fa_pose.js';
 import { powers } from './fa_powers.js';
+import { faWall } from './fa_wall.js';
 
-export const FCFG = { walk: 4.4, run: 8.8, accelG: 24, brake: 36, accelA: 7, latG: 26, jumpV: 16.5, grav: 34, radius: 0.85, height: 3.0, crouchT: 0.2, hp: 400 };
+export const FCFG = { walk: 5.2, run: 11.6, accelG: 34, brake: 40, accelA: 8, latG: 34, jumpV: 16.5, grav: 34, radius: 0.85, height: 3.0, crouchT: 0.2, hp: 400 };
+// V31 CHARGED SUPER JUMP (hold Space on the ground, release to launch): the longer the hold the higher / farther; W (move input) launches forward, a raised camera aim favours height
+export const SJ = { chargeT: 1.15, vyFull: 36, hFull: 25, aimLift: 0.28 };
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3();
 const TAU = Math.PI * 2;
 
@@ -20,7 +23,7 @@ export class FaPlayer {
     this.speed = 0; this.crouchT = 0; this.jumpBuffer = 0; this.landImpact = 0; this.hasInput = false; this.state = 'IDLE'; this.colH = FCFG.height;
     this.hp = FCFG.hp; this.hpT = 0; this.hurtT = 0; this.stats = { punches: 0, hits: 0, grabs: 0, throws: 0, slams: 0, pounds: 0, seismic: 0, propHits: 0, walls: 0, climbs: 0, vaults: 0, rage: 0, blocks: 0, pushes: 0 };
     this.an = { t: 0, ps: 0, mv: 0, rn: 0, air: 0, land: 0, landV: 0, crouch: 0, clm: 0, blk: 0, rage: 0, accel: 0, prevSpeed: 0, stepSide: 0, lean: 0, turn: 0 };
-    this.climb = null; this.pushT = 0; this.lastCharge = 0;
+    this.climb = null; this.wall = null; this.wjT = 0; this.pushT = 0; this.lastCharge = 0;
     this.initPowers(game);
     this.root.rotation.y = this.yaw; this.root.visible = false;
     this.poser.apply(this.locoPose(0.016));
@@ -29,11 +32,11 @@ export class FaPlayer {
   // ------------------------------------------------------------------------------------------------ plumbing
   activate(from) {
     this.pos.copy(from.pos); this.vel.copy(from.vel); this.vel.y = from.vel.y; this.yaw = from.yaw; this.grounded = from.grounded; this.mode = this.grounded ? 'ground' : 'air';
-    this.root.rotation.y = this.yaw; this.root.visible = true; this.cancelAll(); this.climb = null; this.an.land = this.an.landV = 0;
+    this.root.rotation.y = this.yaw; this.root.visible = true; this.cancelAll(); this.climb = null; this.wall = null; this.wjT = 0; this.an.land = this.an.landV = 0;
     const w = this.g.world; w.resolveXZ(this.pos, FCFG.radius, this.pos.y, FCFG.height, 0.4);
     this.root.updateMatrixWorld(true); this.poser.apply(this.locoPose(0.016));
   }
-  deactivate() { this.cancelAll(); this.root.visible = false; this.aura.visible = false; this.light.intensity = 0; this.arcLine.visible = false; this.arcEnd.visible = false; this.mark.visible = false; $('ragefx') && ($('ragefx').style.opacity = '0'); }
+  deactivate() { this.cancelAll(); this.wall = null; this.root.visible = false; this.aura.visible = false; this.light.intensity = 0; this.arcLine.visible = false; this.arcEnd.visible = false; this.mark.visible = false; $('ragefx') && ($('ragefx').style.opacity = '0'); }
   get busy() { return !!(this.act || this.combo || this.holds.length || this.blocking); }
   get dmgMul() { return this.rage.on ? 1.8 : 1; }
   get kbMul() { return this.rage.on ? 1.6 : 1; }
@@ -46,6 +49,7 @@ export class FaPlayer {
     const want = _c.set(0, 0, 0).addScaledVector(fwd, input.moveY).addScaledVector(right, input.moveX); const hasInput = want.lengthSq() > 1e-4; if (hasInput) want.normalize();
     this.hasInput = hasInput; this.wantDir.copy(want); this.jumpBuffer = Math.max(0, this.jumpBuffer - dt); if (input.jump) this.jumpBuffer = 0.16;
     // ---- climbing / vaulting is a scripted motion
+    this.faWallAssist(dt); if (this.wall) { this.faWallUpdate(dt, input); this.root.updateMatrixWorld(true); return; }
     if (this.climb) { this.updateClimb(dt); this.speed = 0; this.root.rotation.y = this.yaw; this.root.updateMatrixWorld(true); return; }
     // ---- speed limits
     const a = this.act, locked = a && a.lockMove;
@@ -53,21 +57,30 @@ export class FaPlayer {
     if (locked) top = 0;
     // ---- jump (crouch -> launch)
     if (this.jumpBuffer > 0 && this.grounded && this.mode === 'ground' && !a && !this.combo && !this.holdLifting()) {
-      if (!this.tryClimb(want, true)) { this.mode = 'crouch'; this.crouchT = 0; this.jumpBuffer = 0; }
+      if (!this.tryClimb(want, true) && !this.faWallTry(want, true)) { this.mode = 'crouch'; this.crouchT = 0; this.jumpBuffer = 0; }
     }
     if (this.mode === 'crouch') {
-      this.crouchT += dt; top *= 0.3;
-      if (this.crouchT >= R.crouchT) { this.vel.y = R.jumpV * (this.holds.length ? 0.82 : 1); this.grounded = false; this.mode = 'air'; this.jumpFX(); }
+      this.crouchT += dt; top *= 0.3; this.superK = clamp((this.crouchT - R.crouchT) / SJ.chargeT, 0, 1);
+      if (this.crouchT >= R.crouchT && (!input.jumpHeld || this.superK >= 1 || this.holds.length)) {           // a tap = the normal jump; a hold released (or fully charged) = the super jump
+        const k = this.holds.length ? 0 : this.superK; this.vel.y = R.jumpV * (this.holds.length ? 0.82 : 1);
+        if (k > 0.04) {
+          const pitch = this.g.camera.pitch ?? 0.22, up = clamp((0.22 - pitch) / 0.5, 0, 1), dir = hasInput ? want : _c.set(-Math.sin(camYaw), 0, -Math.cos(camYaw)).multiplyScalar(0.4);
+          this.vel.y = R.jumpV + (SJ.vyFull - R.jumpV) * k * (1 + SJ.aimLift * up); const h = SJ.hFull * k * (1 - 0.55 * up) * (hasInput ? 1 : 0.4);
+          this.vel.x = dir.x * (hasInput ? h : h) ; this.vel.z = dir.z * (hasInput ? h : h); this.superAir = k; this.superFX(k);
+        }
+        this.superK = 0; this.grounded = false; this.mode = 'air'; this.jumpFX();
+      }
     }
-    if (this.mode === 'air' && !a && this.vel.y < 7 && hasInput && !this.holds.length) this.tryClimb(want, false);
-    if (this.climb) { this.root.rotation.y = this.yaw; this.root.updateMatrixWorld(true); return; }
+    if (this.mode === 'air' && !a && this.vel.y < 7 && hasInput && !this.holds.length) { if (!this.tryClimb(want, false) && this.jumpBuffer > 0) this.faWallTry(want, false); }
+    if (this.climb || this.wall) { this.root.rotation.y = this.yaw; this.root.updateMatrixWorld(true); return; }
     // ---- horizontal velocity
     const mvv = a ? a.moveVel : (this.combo ? this.combo.moveVel : null);
     if (mvv) { this.vel.x = mvv.x; this.vel.z = mvv.z; }
     else {
       const tx = hasInput ? want.x * top : 0, tz = hasInput ? want.z * top : 0, dx = tx - this.vel.x, dz = tz - this.vel.z, dl = Math.hypot(dx, dz);
       const spd0 = Math.hypot(this.vel.x, this.vel.z), turning = hasInput && spd0 > 1 ? (this.vel.x * want.x + this.vel.z * want.z) / spd0 : 1;
-      const rate = this.grounded ? (hasInput ? (turning < 0.2 ? R.latG : R.accelG) : R.brake) : R.accelA; const m = Math.min(dl, rate * dt * (this.rage.on ? 1.2 : 1));
+      let rate = this.grounded ? (hasInput ? (turning < 0.2 ? R.latG : R.accelG) : R.brake) : R.accelA; if (!this.grounded && this.superAir > 0 && spd0 > top) rate = R.accelA * 0.12;      // V31: a super jump keeps its momentum in the air (steering still works)
+      const m = Math.min(dl, rate * dt * (this.rage.on ? 1.2 : 1));
       if (dl > 1e-6) { this.vel.x += dx / dl * m; this.vel.z += dz / dl * m; }
     }
     // ---- vertical
@@ -91,7 +104,7 @@ export class FaPlayer {
     if (this.mode === 'crouch') { /* planted */ }
     else if (this.pos.y <= gy + 1e-4 && this.vel.y <= 0) {
       if (!this.grounded && this.vel.y < -5) { this.landImpact = -this.vel.y; this.landFX(this.landImpact); }
-      this.pos.y = gy; this.vel.y = 0; this.grounded = true; if (this.mode === 'air') this.mode = 'ground';
+      this.pos.y = gy; this.vel.y = 0; this.grounded = true; if (this.mode === 'air') this.mode = 'ground'; this.superAir = 0;
     } else if (this.grounded && this.pos.y > gy + 0.06) { this.grounded = false; if (this.mode === 'ground') this.mode = 'air'; }
     if (this.grounded && this.mode !== 'crouch') this.pos.y = gy;
     for (const b of w.boxes) {
@@ -182,6 +195,12 @@ export class FaPlayer {
   }
 
   // ------------------------------------------------------------------------------------------------ FX
+  /** takeoff: ground impact ring + a burst of dust and rubble (physical, no glow) */
+  superFX(k) {
+    const g = this.g, c = new THREE.Vector3(this.pos.x, this.pos.y + 0.08, this.pos.z); g.camera.addTrauma(0.2 + 0.3 * k); g.camera.kick && g.camera.kick(0.03 * k); g.sfx.thud(0.5 + 0.5 * k);
+    g.fx.surface.ring(c, new THREE.Vector3(0, 1, 0), 6 + 8 * k, 0.5, 0xc8c0b0); if (g.props) { g.props.debris.burst(c.clone(), Math.round(6 + 14 * k), 5 + 6 * k, 0.12, 0xa8a49c); g.props.shockwave(c, 3 + 4 * k, 4 + 12 * k, 0, 0); if (k > 0.7) g.props.cracks.add(c.x, this.pos.y, c.z, 3, 7); }
+    for (let i = 0; i < 16 + 18 * k; i++) g.fx.dust.emit({ pos: new THREE.Vector3(c.x + rand(-0.9, 0.9), c.y + 0.1, c.z + rand(-0.9, 0.9)), vel: new THREE.Vector3(rand(-1, 1), rand(0.1, 0.8), rand(-1, 1)).normalize().multiplyScalar(rand(3, 8) * (0.6 + k)), size: rand(0.8, 1.8), grow: 1.8, life: rand(0.5, 1.0), drag: 2, color: [0.7, 0.68, 0.62], alpha: 0.5 });
+  }
   jumpFX() {
     const g = this.g; this.an.landV -= 2; g.camera.addTrauma(0.1); g.sfx.thud(0.5);
     g.fx.surface.ring(new THREE.Vector3(this.pos.x, this.pos.y + 0.06, this.pos.z), new THREE.Vector3(0, 1, 0), 5, 0.4, 0xb8b0a0);
@@ -208,7 +227,7 @@ export class FaPlayer {
     const A = this.an, sp = this.speed, P = mkPose(), grounded = this.grounded || this.mode === 'crouch';
     A.t += dt; const t = A.t;
     A.mv = damp(A.mv, grounded && this.mode !== 'vault' ? smoothstep(0.4, 3.6, sp) : 0, 9, dt); A.rn = damp(A.rn, grounded ? smoothstep(6, 8.6, sp) : 0, 7, dt);
-    A.air = damp(A.air, grounded ? 0 : 1, 14, dt); A.crouch = damp(A.crouch, this.mode === 'crouch' ? clamp(this.crouchT / FCFG.crouchT, 0, 1) : 0, 22, dt);
+    A.air = damp(A.air, grounded ? 0 : 1, 14, dt); A.crouch = damp(A.crouch, this.mode === 'crouch' ? clamp(this.crouchT / FCFG.crouchT, 0, 1) * (1 + 0.3 * (this.superK || 0)) : 0, 22, dt);
     A.clm = damp(A.clm, this.climb ? 1 : 0, this.climb ? 16 : 10, dt);
     const stride = lerp(3.1, 5.0, A.rn); const prevPs = A.ps; if (grounded) A.ps += dt * (sp / stride) * TAU; A.ps %= TAU * 50;
     if (grounded && A.mv > 0.5 && dt > 0) {                                  // foot hits the ground twice per cycle
@@ -266,6 +285,7 @@ export class FaPlayer {
       }
       Q.curl = { UL: 1, UR: 1, LL: 1, LR: 1 }; Q.w = W; layer(P, Q, this.poser);
     }
+    this.faWallPose(P, A);
     return P;
   }
 
@@ -293,4 +313,4 @@ export class FaPlayer {
   }
 }
 const $ = id => document.getElementById(id);
-Object.assign(FaPlayer.prototype, powers);
+Object.assign(FaPlayer.prototype, powers, faWall);

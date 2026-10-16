@@ -1,9 +1,10 @@
 // Tiny WebAudio synth for the sounds this test needs (no audio files are bundled). Created lazily on the first key press.
 export class Sfx {
   constructor() { this.ctx = null; this.master = null; this.on = true; }
+  setVol(v) { this.vol = v; if (this.master) this.master.gain.value = v * 0.44; }       // V34: master volume from the settings (0.5 = the original 0.22)
   init() {
     if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
-    try { const C = window.AudioContext || window.webkitAudioContext; this.ctx = new C(); this.master = this.ctx.createGain(); this.master.gain.value = 0.22; this.master.connect(this.ctx.destination); } catch { this.ctx = null; }
+    try { const C = window.AudioContext || window.webkitAudioContext; this.ctx = new C(); this.master = this.ctx.createGain(); this.master.gain.value = (this.vol ?? 0.5) * 0.44; this.master.connect(this.ctx.destination); } catch { this.ctx = null; }
   }
   _noise(dur) { const c = this.ctx, b = c.createBuffer(1, Math.max(1, c.sampleRate * dur | 0), c.sampleRate), d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; const s = c.createBufferSource(); s.buffer = b; return s; }
   _tone(type, f0, f1, dur, vol, delay = 0) {
